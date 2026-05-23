@@ -51,9 +51,15 @@ class DeviceStatusAggregator {
       if (_hasRecentTelemetryProvider()) {
         _staleSeconds = 0;
         bool currentState = _isHumanDetectedProvider();
-        // Update last recorded state for grace period
-        _lastRecordedState = currentState;
-        _humanDetectionHistory.addLast(currentState);
+        
+        // During grace period, use the last-known-good state to bridge IoT sleep gaps
+        bool stateToRecord = _inSyncGracePeriod ? _lastRecordedState : currentState;
+        _humanDetectionHistory.addLast(stateToRecord);
+
+        // Update last recorded state ONLY when not in grace period
+        if (!_inSyncGracePeriod) {
+          _lastRecordedState = currentState;
+        }
         if (_humanDetectionHistory.length > 60) {
           _humanDetectionHistory.removeFirst();
         }

@@ -34,6 +34,20 @@ class CloudManager(private val context: Context) {
         logEvent(event)
     }
 
+    fun logMissionCompleted(missionId: String) {
+        val payload = JSONObject().apply {
+            put("timestamp", java.time.Instant.now().toString())
+            put("mission_id", missionId)
+        }
+
+        val event = JSONObject().apply {
+            put("eventType", "mission_completed")
+            put("payload", payload)
+        }
+
+        logEvent(event)
+    }
+
     fun logEvent(event: JSONObject) {
         queueEvent(event)
         flushQueue()

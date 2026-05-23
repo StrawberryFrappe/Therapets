@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:Therapets/l10n/app_localizations.dart';
@@ -17,6 +18,7 @@ class _MissionOverlayState extends State<MissionOverlay> with SingleTickerProvid
   bool _isExpanded = false;
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
+  StreamSubscription? _completionSub;
 
   @override
   void initState() {
@@ -33,11 +35,12 @@ class _MissionOverlayState extends State<MissionOverlay> with SingleTickerProvid
     super.didChangeDependencies();
     _service = context.read<MissionService>();
     // Listen for completion events to show banners
-    _service.missionCompletions.listen(_showCompletionBanner);
+    _completionSub ??= _service.missionCompletions.listen(_showCompletionBanner);
   }
 
   @override
   void dispose() {
+    _completionSub?.cancel();
     _controller.dispose();
     super.dispose();
   }

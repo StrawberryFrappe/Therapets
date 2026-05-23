@@ -9,7 +9,7 @@ part 'pet_stats.g.dart';
 /// Manages the hunger and happiness stats for a pet.
 /// Stats trickle over time based on configurable rates.
 /// Supports persistence for background stat updates.
-@HiveType(typeId: 0)
+@HiveType(typeId: 1)
 class PetStats extends HiveObject {
   /// Hunger level: 0.0 (starving) to 1.0 (full)
   @HiveField(0)

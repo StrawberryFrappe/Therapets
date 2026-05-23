@@ -174,27 +174,33 @@ class DeviceService {
   // Configuration
   double _shakeThreshold = 2.5;
 
+  int _cachedNativeBpm = 0;
+  int _cachedNativeSpo2 = 0;
+
+  void _tryPreSeed() {
+    if (_cachedNativeBpm > 0 && _cachedNativeSpo2 > 0) {
+      _bioProcessor.preSeed(_cachedNativeBpm, _cachedNativeSpo2);
+    }
+  }
+
   // --- Initialization ---
 
   Future<void> init() async {
     // 1. Attach listeners BEFORE initializing BluetoothService to capture initial state emissions
     
-    // Listen to native human detection and vitals to pre-seed bio processor
-    _nativeHumanSub = _bluetooth.nativeHumanDetected$.listen((isDetected) {
-      if (isDetected && _deviceType == DeviceType.max30100) {
-        // BioProcessor will be pre-seeded when BPM/SpO2 arrive
-      }
-    });
-
+    // Listen to native vitals to pre-seed bio processor
     _nativeBpmSub = _bluetooth.nativeBpm$.listen((bpm) {
-      if (bpm > 0 && _deviceType == DeviceType.max30100) {
-        _bioProcessor.preSeed(bpm, _bioProcessor.latestBioData.spo2);
+      if (bpm > 0) {
+        if (_deviceType == DeviceType.unknown) _deviceType = DeviceType.max30100;
+        _cachedNativeBpm = bpm;
+        _tryPreSeed();
       }
     });
 
     _nativeSpo2Sub = _bluetooth.nativeSpo2$.listen((spo2) {
-      if (spo2 > 0 && _deviceType == DeviceType.max30100) {
-        _bioProcessor.preSeed(_bioProcessor.latestBioData.bpm, spo2);
+      if (spo2 > 0) {
+        _cachedNativeSpo2 = spo2;
+        _tryPreSeed();
       }
     });
 
@@ -278,8 +284,13 @@ class DeviceService {
       _updateState(DeviceConnectionState.connected);
     }
     
-    if (_bluetooth.isNativeHumanDetected && _deviceType == DeviceType.max30100) {
-      _bioProcessor.preSeed(_bluetooth.nativeBpm, _bluetooth.nativeSpo2);
+    if (_bluetooth.isNativeHumanDetected) {
+      _cachedNativeBpm = _bluetooth.currentNativeBpm ?? 0;
+      _cachedNativeSpo2 = _bluetooth.currentNativeSpo2 ?? 0;
+      if (_cachedNativeBpm > 0 && _deviceType == DeviceType.unknown) {
+        _deviceType = DeviceType.max30100;
+      }
+      _tryPreSeed();
     }
     
     // Initial emission
