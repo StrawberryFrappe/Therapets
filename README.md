@@ -153,16 +153,16 @@ The app automatically detects the connected device type based on the BLE packet 
 *Both variants include 6-axis IMU data (Accelerometer + Gyroscope).*
 
 ## Project Structure
-```
+```text
 lib/
 ├── main.dart               # App entry point
+├── core/                   # Bootstrapping & Lifecycle
 ├── services/
-├── services/
-│   ├── bluetooth_service.dart   # Low-level BLE
-│   ├── device_service.dart      # High-level device abstraction
-│   └── cloud/                   # Cloud connectivity
-│       ├── cloud_service.dart   # ThingsBoard API
-│       └── telemetry_tracker.dart # Session tracking
+│   ├── device/             # Low-level BLE & Signal Processors
+│   ├── cloud/              # Cloud connectivity & Telemetry tracking
+│   ├── notifications/      # Foreground service & local notifications
+│   ├── locale_service.dart # i18n localization service
+│   └── update_service.dart # OTA or app updates
 ├── game/
 │   ├── virtual_pet_game.dart    # Main pet game
 │   ├── bob_the_blob.dart        # Pet implementation

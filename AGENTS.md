@@ -45,3 +45,18 @@ The "Sync State" dictates Cloud Telemetry, UI Display, and Daily Missions. It br
 - Native Android foreground service (`BleForegroundService`) is the source of truth.
 - Flutter `DeviceService.onAppResumed()` must NEVER nuke state. It must read canonical state from Native.
 - Cloud pushes (Thingsboard HTTP) and Mission tallies should migrate to Native to survive Flutter Engine suspension.
+
+## Modular Factory: Central Team Manifest
+
+This project uses the Antigravity Modular Factory Workflow. The active agents for this project are defined in the `agents/` directory:
+
+1. **Lead Flutter Engineer** (`agents/lead_flutter_engineer.md`): Focuses on Flutter architecture, state management, and UI.
+2. **BLE/IoT Specialist** (`agents/ble_iot_specialist.md`): Focuses on device communication, foreground services, and telemetry processing.
+3. **Game Developer** (`agents/game_developer.md`): Focuses on the Flame engine, pet lifecycle, and minigames.
+
+### ⚠️ STRICT AGENT MANDATE: DOCUMENTATION & LOGGING
+
+**ALL AGENTS MUST STRICTLY ADHERE TO THE FOLLOWING RULES:**
+1. **Traceability:** You MUST register all your actions, progress, and completed tasks in `FACTORY.md` during each execution cycle.
+2. **Architecture Sync:** You MUST update `docs/architecture.md` (and `README.md` if necessary) whenever making structural changes, introducing new services, or altering the data flow.
+3. **Never bypass the backlog:** Do not implement features that are not tracked in `FACTORY.md`.

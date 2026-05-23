@@ -83,3 +83,7 @@ artifacts/*
 !artifacts/gy906_connection/
 !artifacts/IMU_BLE_Connection/
 !artifacts/*.md
+
+# Antigravity Factory setup
+agents/
+FACTORY.md
