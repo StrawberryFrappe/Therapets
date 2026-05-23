@@ -249,8 +249,15 @@ class BioSignalProcessor {
     _bioDataController.add(_latestBioData);
   }
   
+  int? _previousRawIr;
+
   /// Process raw IR and RED values from the sensor.
   void process(int rawIr, int rawRed) {
+    // Delta spike protection
+    if (_previousRawIr != null && (rawIr - _previousRawIr!).abs() > 20000) {
+      return;
+    }
+    _previousRawIr = rawIr;
     // Handle sensor error/disconnected state (65535 = 0xFFFF = sensor error)
     if (rawIr == 65535 || rawRed == 65535) {
       _latestBioData = const BioData(

@@ -106,7 +106,7 @@ class BleForegroundService : Service() {
                 ACTION_UPDATE_NOTIFICATION -> updateNotificationForData()
                 ACTION_QUERY_STATUS -> {
                     // Reply with canonical persisted connected state and emit lastBytes
-                    val connectedNow = prefs?.getString(PREF_SAVED_ID, null) != null
+                    val connectedNow = prefs?.getBoolean(PREF_CONNECTED, false) == true
                         try { Log.i("BleForegroundService", "query status: connected=$connectedNow humanDetected=${bioProcessor.humanDetected} bpm=${bioProcessor.lastValidBpm} lastBytesLen=${lastBytes?.size ?: 0}") } catch (e: Exception) {}
                         sendStatusBroadcast(connectedNow, bioProcessor.humanDetected, bioProcessor.lastValidBpm, bioProcessor.lastValidSpO2)
                         try {
@@ -258,7 +258,15 @@ class BleForegroundService : Service() {
                             val avgBpm = if (bpmReadings.isNotEmpty()) bpmReadings.average().toInt() else null
                             val avgSpo2 = if (spo2Readings.isNotEmpty()) spo2Readings.average().toInt() else null
                             cloudManager.logSyncStatus(synced, avgBpm, avgSpo2, null)
+                        } else {
+                            val enableOfflineLogs = prefs?.getBoolean("enable_disconnected_cloud_logs", false) == true
+                            if (enableOfflineLogs) {
+                                cloudManager.logSyncStatus(false, null, null, null)
+                            }
                         }
+
+                        MissionManager.evaluateMissions(this@BleForegroundService, cloudManager)
+
                         secondsTick = 0
                         isConnectedThisMinute = false
                         syncedSecondsThisMinute = 0
@@ -588,6 +596,20 @@ class BleForegroundService : Service() {
                 if (bytes.size == 16) {
                     try {
                         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                        
+                        val rawAx = buffer.getShort(0).toInt()
+                        val rawAy = buffer.getShort(2).toInt()
+                        val rawAz = buffer.getShort(4).toInt()
+                        val ax = rawAx / 1000.0
+                        val ay = rawAy / 1000.0
+                        val az = rawAz / 1000.0
+                        val magnitude = kotlin.math.sqrt(ax * ax + ay * ay + az * az)
+                        
+                        if (magnitude > 10.0) {
+                            if (DATA_LOG) Log.w("BleForegroundService", "Corrupted packet dropped (magnitude=$magnitude)")
+                            return
+                        }
+
                         val rawIr = buffer.getShort(12).toInt() and 0xFFFF
                         val rawRed = buffer.getShort(14).toInt() and 0xFFFF
                         bioProcessor.process(rawIr, rawRed)

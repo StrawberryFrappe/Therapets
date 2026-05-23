@@ -54,14 +54,25 @@ class TelemetryData {
       if (bytes.length == 16) {
         rawIr = byteData.getUint16(12, Endian.little);
         rawRed = byteData.getUint16(14, Endian.little);
+        
+        // Corrupted packet filter
+        if (rawIr == 65535 || rawRed == 65535) return null;
       } else if (bytes.length == 14) {
         rawTemp = byteData.getUint16(12, Endian.little);
       }
       
+      final ax = rawAx / 1000.0;
+      final ay = rawAy / 1000.0;
+      final az = rawAz / 1000.0;
+      
+      // Heuristic Filter: IMU Magnitude check
+      final magnitude = sqrt(ax * ax + ay * ay + az * az);
+      if (magnitude > 10.0) return null;
+
       return TelemetryData(
-        ax: rawAx / 1000.0,
-        ay: rawAy / 1000.0,
-        az: rawAz / 1000.0,
+        ax: ax,
+        ay: ay,
+        az: az,
         gx: rawGx / 10.0,
         gy: rawGy / 10.0,
         gz: rawGz / 10.0,
