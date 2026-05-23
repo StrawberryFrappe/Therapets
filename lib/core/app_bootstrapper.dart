@@ -122,10 +122,10 @@ class AppBootstrapper {
   }
 
   static void _registerAdapters() {
-    Hive.registerAdapter(PetStatsAdapter());
-    Hive.registerAdapter(SyncDurationMissionAdapter());
-    Hive.registerAdapter(MinigamePlayMissionAdapter());
-    Hive.registerAdapter(FeedPetMissionAdapter());
+    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(PetStatsAdapter());
+    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(SyncDurationMissionAdapter());
+    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(MinigamePlayMissionAdapter());
+    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(FeedPetMissionAdapter());
   }
 
   static Future<PetStats> _loadOrMigratePetStats(

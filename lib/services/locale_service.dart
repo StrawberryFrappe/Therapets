@@ -4,7 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Singleton service that manages the user's language preference.
+/// Service that manages the user's language preference.
 /// 
 /// On [init], it loads the persisted locale from SharedPreferences.
 /// If none is saved, it falls back to the device's system locale,

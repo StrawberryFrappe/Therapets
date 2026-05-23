@@ -10,6 +10,7 @@ import '../../game/virtual_pet_game.dart';
 import '../pulse_oximeter/pulse_oximeter_screen.dart';
 import '../temperature_sensor/temperature_sensor_screen.dart';
 import 'token_scanner_page.dart';
+import 'package:provider/provider.dart';
 
 import 'sections/stat_rates_section.dart';
 import 'sections/notifications_section.dart';
@@ -50,7 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
   double _sbrUpwardMultiplier = 1.5;
   
   // Cloud configuration
-  final CloudService _cloud = CloudService();
+  late final CloudService _cloud;
   String _cloudBaseUrl = '';
   String _cloudDeviceToken = '';
   
@@ -64,6 +65,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    _cloud = context.read<CloudService>();
     _loadPersisted();
     _loadPersistedRates();
     _loadFakeSyncSettings();

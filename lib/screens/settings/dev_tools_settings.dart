@@ -15,6 +15,7 @@ import '../../game/virtual_pet_game.dart';
 import '../../services/device/device_service.dart';
 import '../../services/locale_service.dart';
 import '../../services/notifications/foreground_notification.dart';
+import 'package:provider/provider.dart';
 
 /// DevToolsSettings - Contains all Bluetooth pairing, telemetry, diagnostic
 /// functionality, and pet stat controls.
@@ -33,7 +34,7 @@ class DevToolsSettings extends StatefulWidget {
 }
 
 class _DevToolsSettingsState extends State<DevToolsSettings> {
-  final DeviceService _device = DeviceService();
+  late final DeviceService _device;
   BluetoothDevice? _connectedDevice;
   String _status = 'SEARCHING';
   
@@ -60,8 +61,8 @@ class _DevToolsSettingsState extends State<DevToolsSettings> {
   @override
   void initState() {
     super.initState();
+    _device = context.read<DeviceService>();
     _init();
-    _device.init();
     _loadPersisted();
     _loadFakeSyncSettings();
     
@@ -361,13 +362,13 @@ class _DevToolsSettingsState extends State<DevToolsSettings> {
                           _buildLanguageFlag(
                             assetPath: 'assets/images/UK.png',
                             locale: const Locale('en'),
-                            isSelected: LocaleService().locale.languageCode == 'en',
+                            isSelected: context.read<LocaleService>().locale.languageCode == 'en',
                           ),
                           const SizedBox(width: 16),
                           _buildLanguageFlag(
                             assetPath: 'assets/images/Chile.png',
                             locale: const Locale('es'),
-                            isSelected: LocaleService().locale.languageCode == 'es',
+                            isSelected: context.read<LocaleService>().locale.languageCode == 'es',
                           ),
                         ],
                       ),
@@ -434,7 +435,7 @@ class _DevToolsSettingsState extends State<DevToolsSettings> {
   }) {
     return GestureDetector(
       onTap: () {
-        LocaleService().setLocale(locale);
+        context.read<LocaleService>().setLocale(locale);
         setState(() {});
       },
       child: Container(
