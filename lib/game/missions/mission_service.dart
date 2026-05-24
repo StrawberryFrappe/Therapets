@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive/hive.dart';
 import 'mission.dart';
 import 'daily_missions.dart';
 import '../pets/pet_stats.dart';
@@ -9,15 +11,25 @@ import '../../services/cloud/cloud_service.dart';
 
 /// Service to manage daily missions.
 class MissionService {
-  static final MissionService _instance = MissionService._internal();
-  factory MissionService() => _instance;
-  MissionService._internal();
+  final CloudService _cloudService;
+  PetStats? _petStats;
 
-  static const String _missionDataKey = 'daily_missions_data';
-  static const String _lastResetKey = 'last_mission_reset';
+  MissionService({required CloudService cloudService}) : _cloudService = cloudService;
+
+  // Atomic bundle key — replaces the two individual keys above.
+  static const String _bundleKey = 'mission_bundle';
 
   List<Mission> _activeMissions = [];
   List<Mission> get activeMissions => List.unmodifiable(_activeMissions);
+
+  bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
+
+  // Fail-safe to prevent overwriting SharedPreferences if load fails
+  bool _canSave = false;
+
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
 
   // Stream for UI updates
   final _missionUpdateController = StreamController<List<Mission>>.broadcast();
@@ -29,17 +41,22 @@ class MissionService {
 
   DateTime _lastResetDate = DateTime.now();
 
-  PetStats? _petStats;
+  // Save lock — serialises concurrent save calls so writes never interleave.
+  Future<void> _saveLock = Future.value();
 
-  /// Initialize with PetStats reference
-  Future<void> init(PetStats stats) async {
+  Box? _box;
+
+  /// Initialize with PetStats reference and Hive box
+  Future<void> init(PetStats stats, Box? box) async {
     _petStats = stats;
+    _box = box;
     await _loadMissions();
     await _checkDailyReset();
   }
 
   /// Update all active missions with new context
   Future<void> update(MissionContext ctx) async {
+    if (!_isInitialized) return;
     bool stateChanged = false;
 
     for (final mission in _activeMissions) {
@@ -57,7 +74,7 @@ class MissionService {
     }
 
     if (stateChanged) {
-      _saveProgress();
+      await _saveProgress();
       _notifyListeners();
     }
   }
@@ -68,7 +85,7 @@ class MissionService {
     }
     
     // Log to cloud - await to ensure it's sent
-    await CloudService().logMissionCompleted(
+    await _cloudService.logMissionCompleted(
       timestamp: DateTime.now(),
       missionId: mission.id,
     );
@@ -88,16 +105,18 @@ class MissionService {
   }
 
   Future<void> _generateDailyMissions() async {
+    debugPrint('[MissionService] Generating fresh daily missions');
     // Generate 3 random missions for the day
-    // In a real app, use a seed based on the date so it's deterministic
     final missions = <Mission>[
-      SyncDurationMission(targetDuration: 120 * 60, rewardGold: 50), // 2 hours
-      MinigamePlayMission(targetPlays: 3, rewardGold: 30),
-      FeedPetMission(targetFeeds: 3, rewardGold: 20),
+      SyncDurationMission(targetDuration: 120 * 60, goldReward: 50), // 2 hours
+      MinigamePlayMission(targetPlays: 3, goldReward: 30),
+      FeedPetMission(targetFeeds: 3, goldReward: 20),
     ];
     
     _activeMissions = missions;
     _lastResetDate = DateTime.now();
+    _isInitialized = true; // Mark as initialized before saving
+    _canSave = true; // Safe to save now
     await _saveProgress();
     _notifyListeners();
   }
@@ -108,35 +127,68 @@ class MissionService {
   }
 
   Future<void> _loadMissions() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // Load last reset date
-    final lastResetMs = prefs.getInt(_lastResetKey);
-    if (lastResetMs != null) {
-      _lastResetDate = DateTime.fromMillisecondsSinceEpoch(lastResetMs);
+    if (_isLoading) {
+      debugPrint('[MissionService] LOAD SKIPPED - Already loading');
+      return;
     }
     
-    // Load serialized missions
-    final missionJson = prefs.getString(_missionDataKey);
-    if (missionJson != null) {
-      try {
-        final List<dynamic> missionList = jsonDecode(missionJson);
-        _activeMissions = missionList
-            .map((json) => _missionFromJson(json as Map<String, dynamic>))
-            .whereType<Mission>()
-            .toList();
-        
-        if (_activeMissions.isNotEmpty) {
+    debugPrint('[MissionService] LOAD START (Hive)');
+    _isLoading = true;
+
+    try {
+      if (_box != null && _box!.isNotEmpty) {
+        final lastResetMs = _box!.get('lastResetMs') as int?;
+        if (lastResetMs != null) {
+          _lastResetDate = DateTime.fromMillisecondsSinceEpoch(lastResetMs);
+        }
+        final missions = _box!.get('missions') as List?;
+        if (missions != null && missions.isNotEmpty) {
+          _activeMissions = List<Mission>.from(missions);
+          _isInitialized = true;
+          _canSave = true;
           _notifyListeners();
+          debugPrint('[MissionService] LOAD SUCCESS (Hive) - ${_activeMissions.length} missions');
           return;
         }
-      } catch (e) {
-        print('[MissionService] Error loading missions: $e');
       }
+
+      // Legacy Migration from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final bundleJson = prefs.getString(_bundleKey);
+      if (bundleJson != null) {
+        try {
+          final bundle = jsonDecode(bundleJson) as Map<String, dynamic>;
+          final lastResetMs = bundle['lastResetMs'] as int?;
+          if (lastResetMs != null) {
+            _lastResetDate = DateTime.fromMillisecondsSinceEpoch(lastResetMs);
+          }
+          final missionJson = bundle['missions'] as String?;
+          if (missionJson != null) {
+            final List<dynamic> missionList = jsonDecode(missionJson);
+            _activeMissions = missionList
+                .map((j) => _missionFromJson(j as Map<String, dynamic>))
+                .whereType<Mission>()
+                .toList();
+            if (_activeMissions.isNotEmpty) {
+              debugPrint('[MissionService] LOAD - Found ${_activeMissions.length} missions in bundle (migrating)');
+              _isInitialized = true;
+              _canSave = true; 
+              _notifyListeners();
+              await save(); // Save to Hive
+              return;
+            }
+          }
+        } catch (e) {
+          debugPrint('[MissionService] Bundle parse error during migration: $e');
+        }
+      }
+
+      // If nothing found, generate fresh
+      await _generateDailyMissions();
+      debugPrint('[MissionService] LOAD COMPLETE - Fresh missions generated');
+    } finally {
+      _isLoading = false;
     }
-    
-    // If we couldn't load, generate new missions
-    await _generateDailyMissions();
   }
 
   Mission? _missionFromJson(Map<String, dynamic> json) {
@@ -154,15 +206,80 @@ class MissionService {
     }
   }
 
-  Future<void> _saveProgress() async {
-    final prefs = await SharedPreferences.getInstance();
+  /// Public entry-point so callers (e.g. the app lifecycle handler) can
+  /// explicitly flush mission state to disk without going through an update cycle.
+  Future<void> save() => _enqueueSave();
+
+  Future<void> _saveProgress() => _enqueueSave();
+
+  /// Enqueue a save. Concurrent callers are serialised — each waits for the
+  /// previous save to finish before starting its own write.
+  Future<void> _enqueueSave() {
+    if (!_isInitialized || !_canSave) return Future.value();
+    _saveLock = _saveLock.catchError((_) {}).then((_) => _doSave());
+    return _saveLock;
+  }
+
+  Future<void> _doSave() async {
+    if (_box != null) {
+      debugPrint('[MissionService] SAVE START (Hive)');
+      try {
+        await _box!.put('lastResetMs', _lastResetDate.millisecondsSinceEpoch);
+        await _box!.put('missions', _activeMissions);
+        debugPrint('[MissionService] SAVE SUCCESS (Hive)');
+      } catch (e) {
+        debugPrint('[MissionService] SAVE FAILED (Hive): $e');
+      }
+    }
+      
+    // Mirror to SharedPreferences for atomic rehydration on next startup
+    await _mirrorToPrefs();
+  }
+
+  /// Mirror critical mission state to SharedPreferences for atomic rehydration.
+  Future<void> _mirrorToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bundle = {
+        'lastResetMs': _lastResetDate.millisecondsSinceEpoch,
+        'missions': jsonEncode(_activeMissions.map((m) => m.toJson()).toList()),
+      };
+      await prefs.setString(_bundleKey, jsonEncode(bundle));
+      debugPrint('[MissionService] Mirror to SharedPreferences SUCCESS');
+    } catch (e) {
+      debugPrint('[MissionService] Mirror to SharedPreferences FAILED: $e');
+    }
+  }
+
+  /// Rehydrate mission progress based on background sync time.
+  /// Called by the AppBootstrapper during startup.
+  Future<void> rehydrateBackgroundProgress(double elapsedSeconds, bool wasSynced) async {
+    if (!_isInitialized || elapsedSeconds <= 0) return;
+
+    debugPrint('[MissionService] Rehydrating background progress: ${elapsedSeconds.toStringAsFixed(1)}s (synced: $wasSynced)');
     
-    // Save last reset date
-    await prefs.setInt(_lastResetKey, _lastResetDate.millisecondsSinceEpoch);
-    
-    // Serialize and save all missions
-    final missionList = _activeMissions.map((m) => m.toJson()).toList();
-    await prefs.setString(_missionDataKey, jsonEncode(missionList));
+    bool stateChanged = false;
+    final ctx = MissionContext(
+      dt: elapsedSeconds,
+      isDeviceSynced: wasSynced,
+    );
+
+    for (final mission in _activeMissions) {
+      if (!mission.isCompleted) {
+        final justCompleted = mission.update(ctx);
+        if (justCompleted) {
+          await _handleMissionCompletion(mission);
+          stateChanged = true;
+        } else if (mission.progress > 0) {
+          stateChanged = true;
+        }
+      }
+    }
+
+    if (stateChanged) {
+      await _saveProgress();
+      _notifyListeners();
+    }
   }
 
   void _notifyListeners() {

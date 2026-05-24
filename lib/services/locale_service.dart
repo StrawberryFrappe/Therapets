@@ -4,15 +4,13 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Singleton service that manages the user's language preference.
+/// Service that manages the user's language preference.
 /// 
 /// On [init], it loads the persisted locale from SharedPreferences.
 /// If none is saved, it falls back to the device's system locale,
 /// defaulting to English if the device language is not supported.
 class LocaleService extends ChangeNotifier {
-  static final LocaleService _instance = LocaleService._();
-  factory LocaleService() => _instance;
-  LocaleService._();
+  LocaleService();
 
   static const String _prefKey = 'app_locale';
   static const List<String> supportedCodes = ['en', 'es'];

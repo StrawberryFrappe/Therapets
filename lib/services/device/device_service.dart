@@ -1,16 +1,16 @@
 import 'dart:async';
-import 'dart:collection';
-import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothService;
 
 import 'bluetooth_service.dart';
 import 'bio_signal_processor.dart';
 import 'temperature_signal_processor.dart';
+import 'device_status_aggregator.dart';
+import '../../game/models/telemetry_data.dart';
 export 'bluetooth_service.dart' show BluetoothUserAction, BluetoothUserActionType;
 export 'bio_signal_processor.dart' show BioData;
 export 'temperature_signal_processor.dart' show TemperatureData;
+export '../../game/models/telemetry_data.dart';
 
 
 /// High-level device state.
@@ -47,11 +47,7 @@ class ShakeEvent extends DeviceEvent {}
 /// Consumes low-level [BluetoothService] and exposes high-level domain objects
 /// (TelemetryData, ConnectionState) to the rest of the application.
 class DeviceService {
-  static final DeviceService _instance = DeviceService._internal();
-
-  factory DeviceService() => _instance;
-
-  DeviceService._internal();
+  DeviceService();
 
   final BluetoothService _bluetooth = BluetoothService();
 
@@ -88,7 +84,6 @@ class DeviceService {
   }
 
   int _activeMinigames = 0;
-  bool get _isMinigameRunning => _activeMinigames > 0;
 
   void registerMinigameStart() {
     _activeMinigames++;
@@ -106,64 +101,38 @@ class DeviceService {
     }
   }
   
-  // Grace period for sync status (12 seconds to accommodate 10s barrage OFF phase)
-  static const Duration _syncGracePeriod = Duration(seconds: 12);
-  Timer? _syncGraceTimer;
-  bool _inSyncGracePeriod = false;
-  bool _wasHumanDetected = false;
-  
-  // Debounce buffer - require consecutive "no human" samples before triggering grace
-  static const int _noHumanDebounceThreshold = 20; // ~200ms at 100Hz
-  int _consecutiveNoHumanSamples = 0;
-  
   // Liveness tracking - require recent telemetry data to consider "connected"
   static const Duration _livenessTimeout = Duration(seconds: 3);
   DateTime? _lastTelemetryTime;
-  
-  // Barrage active time sliding window (60 seconds)
-  final Queue<bool> _humanDetectionHistory = Queue<bool>();
-  Timer? _historyTimer;
-  
+  bool _awaitingFreshTelemetry = true;
+
   /// Check if we have received telemetry data recently (liveness check).
   bool get _hasRecentTelemetry {
     if (_lastTelemetryTime == null) return false;
     return DateTime.now().difference(_lastTelemetryTime!) < _livenessTimeout;
   }
-  
-  DeviceDisplayStatus get currentDisplayStatus {
-    if (_currentState == DeviceConnectionState.connected) {
-      // Require recent telemetry data (IMU liveness check) to truly be "connected"
-      if (!_hasRecentTelemetry) {
-        // No recent data - we're waiting for connection to establish
-        final hasSaved = _bluetooth.getSavedDeviceId() != null;
-        return hasSaved ? DeviceDisplayStatus.waiting : DeviceDisplayStatus.searching;
-      }
-      
-      // We have recent data - check if human is detected via appropriate sensor
-      // Grace period only applies if we previously had REAL synced status with actual data
-      final humanDetectedReal = _isHumanDetected();
-      final isDebouncing = _wasHumanDetected && !_inSyncGracePeriod && _consecutiveNoHumanSamples < _noHumanDebounceThreshold;
-      final humanDetected = humanDetectedReal || isDebouncing;
-      
-      // Calculate active time in the last 60 seconds
-      int activeSeconds = _humanDetectionHistory.where((detected) => detected).length;
-      
-      // We expect up to 30s of active time in a full 60s window (due to 10s ON / 10s OFF).
-      // If the window is still filling (length < 60), we scale the requirement.
-      // Require 33% active time over the trailing window to provide proper leeway.
-      int windowSize = _humanDetectionHistory.length;
-      int requiredSeconds = windowSize > 0 ? (windowSize * 0.33).round() : 0;
-      bool barrageMet = activeSeconds >= requiredSeconds;
-      
-      if (_isMinigameRunning || (barrageMet && (humanDetected || (_inSyncGracePeriod && _wasHumanDetected)))) {
-        return DeviceDisplayStatus.synced;
-      }
-      return DeviceDisplayStatus.connected;
-    }
-    // If not connected, check if we are "waiting" (saved ID exists) or "searching"
+
+  DeviceDisplayStatus _staleDisplayStatus() {
     final hasSaved = _bluetooth.getSavedDeviceId() != null;
     return hasSaved ? DeviceDisplayStatus.waiting : DeviceDisplayStatus.searching;
   }
+
+  bool get _hasFreshTelemetryForUi {
+    return !_awaitingFreshTelemetry && _hasRecentTelemetry;
+  }
+  
+  late final DeviceStatusAggregator _statusAggregator = DeviceStatusAggregator(
+    baseStatusProvider: () {
+      if (_currentState == DeviceConnectionState.connected) return DeviceDisplayStatus.connected;
+      return _staleDisplayStatus();
+    },
+    staleStatusProvider: _staleDisplayStatus,
+    isHumanDetectedProvider: _isHumanDetected,
+    isMinigameRunningProvider: () => _activeMinigames > 0,
+    hasRecentTelemetryProvider: () => _hasFreshTelemetryForUi,
+  );
+
+  DeviceDisplayStatus get currentDisplayStatus => _statusAggregator.currentDisplayStatus;
   
   /// Check if human is detected based on device type.
   bool _isHumanDetected() {
@@ -182,6 +151,9 @@ class DeviceService {
   StreamSubscription? _nativeConnectionSub;
   StreamSubscription? _bioSub;
   StreamSubscription? _tempSub;
+  StreamSubscription? _nativeHumanSub;
+  StreamSubscription? _nativeBpmSub;
+  StreamSubscription? _nativeSpo2Sub;
 
   // Device type detection (sticky - determined by first packet)
   DeviceType _deviceType = DeviceType.unknown;
@@ -202,11 +174,41 @@ class DeviceService {
   // Configuration
   double _shakeThreshold = 2.5;
 
+  int _cachedNativeBpm = 0;
+  int _cachedNativeSpo2 = 0;
+  bool _cachedNativeHumanDetected = false;
+
+  void _tryPreSeed() {
+    if (_cachedNativeHumanDetected && _cachedNativeBpm > 0 && _cachedNativeSpo2 > 0) {
+      _bioProcessor.preSeed(_cachedNativeBpm, _cachedNativeSpo2);
+    }
+  }
+
   // --- Initialization ---
 
   Future<void> init() async {
-    // Ensure BluetoothService is initialized if not already
-    await _bluetooth.init();
+    // 1. Attach listeners BEFORE initializing BluetoothService to capture initial state emissions
+    
+    // Listen to native vitals to pre-seed bio processor
+    _nativeHumanSub = _bluetooth.nativeHumanDetected$.listen((detected) {
+      _cachedNativeHumanDetected = detected;
+      _tryPreSeed();
+    });
+
+    _nativeBpmSub = _bluetooth.nativeBpm$.listen((bpm) {
+      if (bpm > 0) {
+        if (_deviceType == DeviceType.unknown) _deviceType = DeviceType.max30100;
+        _cachedNativeBpm = bpm;
+        _tryPreSeed();
+      }
+    });
+
+    _nativeSpo2Sub = _bluetooth.nativeSpo2$.listen((spo2) {
+      if (spo2 > 0) {
+        _cachedNativeSpo2 = spo2;
+        _tryPreSeed();
+      }
+    });
 
     // Listen to native connected status for robust state
     // We prioritize native status as it survives UI restarts
@@ -222,9 +224,8 @@ class DeviceService {
            _tempProcessor.reset();
            // Reset liveness and grace period state
            _lastTelemetryTime = null;
-           _inSyncGracePeriod = false;
-           _wasHumanDetected = false;
-           _syncGraceTimer?.cancel();
+           _awaitingFreshTelemetry = true;
+           _statusAggregator.reset();
          }
        }
     });
@@ -240,6 +241,7 @@ class DeviceService {
       if (data != null) {
         // Update liveness timestamp on every valid packet (IMU data = device alive)
         _lastTelemetryTime = DateTime.now();
+        _awaitingFreshTelemetry = false;
         
         _telemetryController.add(data);
         _checkForHighLevelEvents(data);
@@ -267,66 +269,41 @@ class DeviceService {
     
     // Listen to bio data changes to update display status with grace period
     _bioSub = _bioProcessor.bioData$.listen((bioData) {
-      _handleHumanDetectionChange(bioData.humanDetected);
+      _statusAggregator.handleHumanDetectionChange(bioData.humanDetected);
     });
     
     // Listen to temperature data changes to update display status
     _tempSub = _tempProcessor.temperatureData$.listen((tempData) {
-      _handleHumanDetectionChange(tempData.humanDetected);
+      _statusAggregator.handleHumanDetectionChange(tempData.humanDetected);
     });
     
-    // Initialize barrage evaluation timer
-    _historyTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_currentState == DeviceConnectionState.connected && _hasRecentTelemetry) {
-        _humanDetectionHistory.addLast(_isHumanDetected());
-        if (_humanDetectionHistory.length > 60) {
-          _humanDetectionHistory.removeFirst(); // maintain 60-second window
-        }
-        _emitDisplayStatus(currentDisplayStatus);
-      } else if (_humanDetectionHistory.isNotEmpty) {
-        // clear history on disconnect
-        _humanDetectionHistory.clear();
-      }
+    _statusAggregator.status$.listen((status) {
+      _emitDisplayStatus(status);
     });
+
+    // 2. Now initialize BluetoothService (triggers initial broadcasts)
+    await _bluetooth.init();
+    
+    // 3. Re-verify initial state if listeners were attached too late for some reason
+    // or to handle the synchronous state stored in BluetoothService
+    if (_bluetooth.isNativeConnected) {
+      _updateState(DeviceConnectionState.connected);
+    }
+    
+    if (_bluetooth.isNativeHumanDetected) {
+      _cachedNativeHumanDetected = true;
+      _cachedNativeBpm = _bluetooth.nativeBpm;
+      _cachedNativeSpo2 = _bluetooth.nativeSpo2;
+      if (_cachedNativeBpm > 0 && _deviceType == DeviceType.unknown) {
+        _deviceType = DeviceType.max30100;
+      }
+      _tryPreSeed();
+    }
     
     // Initial emission
     _emitDisplayStatus(currentDisplayStatus);
   }
   
-  /// Handle human detection changes with grace period and debounce.
-  void _handleHumanDetectionChange(bool humanDetected) {
-    if (humanDetected) {
-      // Human detected - cancel any pending grace timer, reset debounce, and update
-      _syncGraceTimer?.cancel();
-      _inSyncGracePeriod = false;
-      _consecutiveNoHumanSamples = 0; // Reset debounce counter
-      _wasHumanDetected = true;
-      _emitDisplayStatus(currentDisplayStatus);
-    } else {
-      // Human not detected - increment debounce counter
-      _consecutiveNoHumanSamples++;
-      
-      if (_wasHumanDetected && !_inSyncGracePeriod) {
-        // Was synced, check if debounce threshold met
-        if (_consecutiveNoHumanSamples >= _noHumanDebounceThreshold) {
-          // Debounce threshold met - start grace period
-          _inSyncGracePeriod = true;
-          _syncGraceTimer?.cancel();
-          _syncGraceTimer = Timer(_syncGracePeriod, () {
-            // Grace period expired
-            _inSyncGracePeriod = false;
-            _wasHumanDetected = false;
-            _emitDisplayStatus(currentDisplayStatus);
-          });
-        }
-        // Don't emit yet - either still in debounce or grace period
-      } else if (!_wasHumanDetected) {
-        // Never was synced, just emit current status
-        _emitDisplayStatus(currentDisplayStatus);
-      }
-      // If already in grace period, do nothing - let the timer handle it
-    }
-  }
 
   void _updateState(DeviceConnectionState newState) {
     if (_currentState != newState) {
@@ -393,140 +370,61 @@ class DeviceService {
   Future<bool> performRequestPermissions() => _bluetooth.performRequestPermissions();
   Map<String, bool> get permissionStatuses => _bluetooth.permissionStatuses;
 
+  /// Called when the app returns from background/lock screen.
+  /// Re-attaches the severed EventChannel and resets stale Dart state
+  /// so the monitoring pipeline recovers immediately.
+  Future<void> onAppResumed() async {
+    // DO NOT reset liveness. The native service holds the source of truth.
+    // If we nuke state here, we destroy the background barrage history.
+
+    // Re-attach native event stream and request fresh canonical status from native service
+    await _bluetooth.reattachNativeEventStream();
+  }
+
+  // --- Last Reading API (for display during transmission pauses) ---
+
+  /// Get the last valid bio reading (with BPM and SpO2 values).
+  /// Returns null if no valid reading is available.
+  BioData? get lastValidBioReading => _bioProcessor.lastValidBioData;
+  
+  /// Get the timestamp of the last valid bio reading.
+  DateTime? get lastValidBioReadingTime => _bioProcessor.lastValidBioDataTimestamp;
+  
+  /// Get the last valid temperature reading.
+  /// Returns null if no valid reading is available.
+  TemperatureData? get lastValidTemperatureReading => _tempProcessor.lastValidData;
+  
+  /// Get the timestamp of the last valid temperature reading.
+  DateTime? get lastValidTemperatureReadingTime => _tempProcessor.lastValidDataTimestamp;
+  
+  /// Check if bio reading is still fresh (within timeout).
+  /// Useful for determining if last reading should be displayed.
+  BioData? getFreshBioReading([Duration timeout = const Duration(seconds: 60)]) {
+    return _bioProcessor.getFreshValidReading(timeout);
+  }
+  
+  /// Check if temperature reading is still fresh (within timeout).
+  /// Useful for determining if last reading should be displayed.
+  TemperatureData? getFreshTemperatureReading([Duration timeout = const Duration(seconds: 60)]) {
+    return _tempProcessor.getFreshValidReading(timeout);
+  }
 
   void dispose() {
     _rawSub?.cancel();
     _bleConnectionSub?.cancel();
     _nativeConnectionSub?.cancel();
+    _nativeHumanSub?.cancel();
+    _nativeBpmSub?.cancel();
+    _nativeSpo2Sub?.cancel();
     _bioSub?.cancel();
     _tempSub?.cancel();
-    _syncGraceTimer?.cancel();
-    _historyTimer?.cancel();
+    _statusAggregator.dispose();
     _bioProcessor.dispose();
     _tempProcessor.dispose();
     _connectionStateController.close();
     _displayStatusController.close();
     _telemetryController.close();
     _eventsController.close();
-  }
-}
-
-/// Decoded IMU telemetry data from the M5-IMU-Sensor device.
-/// 
-/// The device sends 12, 14, or 16 bytes:
-/// - 12 bytes: 6 × int16 little-endian (IMU only)
-/// - 14 bytes: 7 × int16 little-endian (IMU + GY906 temperature sensor)
-/// - 16 bytes: 8 × int16 little-endian (IMU + MAX30100 bio sensor)
-/// 
-/// IMU Data:
-/// - Accelerometer (ax, ay, az): raw value ÷ 1000 = g
-/// - Gyroscope (gx, gy, gz): raw value ÷ 10 = deg/s
-/// 
-/// GY906 Temperature Data (14-byte payload):
-/// - rawTemp: Raw temperature value
-/// - To convert to Celsius: (rawTemp * 0.02) - 273.15
-/// 
-/// MAX30100 Bio Sensor Data (16-byte payload):
-/// - rawIr: Raw infrared light intensity (or null if not present)
-/// - rawRed: Raw red LED light intensity (or null if not present)
-class TelemetryData {
-  /// Accelerometer X-axis in g
-  final double ax;
-  /// Accelerometer Y-axis in g
-  final double ay;
-  /// Accelerometer Z-axis in g
-  final double az;
-  /// Gyroscope X-axis in deg/s
-  final double gx;
-  /// Gyroscope Y-axis in deg/s
-  final double gy;
-  /// Gyroscope Z-axis in deg/s
-  final double gz;
-  /// Raw IR value from bio sensor (null if not present, 65535 if sensor error)
-  final int? rawIr;
-  /// Raw RED value from bio sensor (null if not present, 65535 if sensor error)
-  final int? rawRed;
-  /// Raw temperature value from GY906 sensor (null if not present)
-  final int? rawTemp;
-
-  const TelemetryData({
-    required this.ax,
-    required this.ay,
-    required this.az,
-    required this.gx,
-    required this.gy,
-    required this.gz,
-    this.rawIr,
-    this.rawRed,
-    this.rawTemp,
-  });
-
-  /// Magnitude of the acceleration vector.
-  /// Useful for motion detection (e.g., jump threshold in games).
-  /// At rest, this should be ~1.0g (gravity).
-  double get magnitude => sqrt(ax * ax + ay * ay + az * az);
-  
-  /// Temperature in Celsius (null if not a GY906 packet).
-  /// Only valid when rawTemp is not null.
-  double? get temperatureCelsius => rawTemp != null 
-      ? TemperatureSignalProcessor.rawToCelsius(rawTemp!) 
-      : null;
-
-  /// Factory to decode 12, 14, or 16-byte payload.
-  /// Returns null if bytes are invalid.
-  static TelemetryData? fromBytes(List<int> bytes) {
-    // Support 12-byte (IMU only), 14-byte (IMU + Temp), and 16-byte (IMU + Bio) payloads
-    if (bytes.length != 12 && bytes.length != 14 && bytes.length != 16) return null;
-    
-    try {
-      final data = Uint8List.fromList(bytes);
-      final byteData = ByteData.sublistView(data);
-      
-      // Read 6 × int16 little-endian for IMU
-      final rawAx = byteData.getInt16(0, Endian.little);
-      final rawAy = byteData.getInt16(2, Endian.little);
-      final rawAz = byteData.getInt16(4, Endian.little);
-      final rawGx = byteData.getInt16(6, Endian.little);
-      final rawGy = byteData.getInt16(8, Endian.little);
-      final rawGz = byteData.getInt16(10, Endian.little);
-      
-      // Read sensor data based on payload size
-      int? rawIr;
-      int? rawRed;
-      int? rawTemp;
-      
-      if (bytes.length == 16) {
-        // MAX30100: Bio values are UNSIGNED 16-bit (0-65535)
-        // 65535 (0xFFFF) indicates sensor error
-        rawIr = byteData.getUint16(12, Endian.little);
-        rawRed = byteData.getUint16(14, Endian.little);
-      } else if (bytes.length == 14) {
-        // GY906: Temperature value is UNSIGNED 16-bit
-        rawTemp = byteData.getUint16(12, Endian.little);
-      }
-      
-      return TelemetryData(
-        ax: rawAx / 1000.0,
-        ay: rawAy / 1000.0,
-        az: rawAz / 1000.0,
-        gx: rawGx / 10.0,
-        gy: rawGy / 10.0,
-        gz: rawGz / 10.0,
-        rawIr: rawIr,
-        rawRed: rawRed,
-        rawTemp: rawTemp,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  String toString() {
-    final bio = rawIr != null ? ' IR:$rawIr RED:$rawRed' : '';
-    final temp = rawTemp != null ? ' TEMP:${temperatureCelsius?.toStringAsFixed(1)}°C' : '';
-    return 'A:(${ax.toStringAsFixed(2)}, ${ay.toStringAsFixed(2)}, ${az.toStringAsFixed(2)}) '
-           'G:(${gx.toStringAsFixed(1)}, ${gy.toStringAsFixed(1)}, ${gz.toStringAsFixed(1)})$bio$temp';
   }
 }
 

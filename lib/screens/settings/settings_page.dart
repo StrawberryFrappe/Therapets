@@ -10,6 +10,7 @@ import '../../game/virtual_pet_game.dart';
 import '../pulse_oximeter/pulse_oximeter_screen.dart';
 import '../temperature_sensor/temperature_sensor_screen.dart';
 import 'token_scanner_page.dart';
+import 'package:provider/provider.dart';
 
 import 'sections/stat_rates_section.dart';
 import 'sections/notifications_section.dart';
@@ -17,6 +18,7 @@ import 'sections/cloud_sync_section.dart';
 import 'sections/debug_section.dart';
 import 'sections/app_updates_section.dart';
 import '../../services/update_service.dart';
+import '../../game/game_settings.dart';
 import 'widgets/telemetry_terminal.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -45,14 +47,17 @@ class _SettingsPageState extends State<SettingsPage> {
   // Debug: Fake sync
   bool _fakeSyncEnabled = false;
   bool _fakeSyncValue = false;
+  // SBR upward speed multiplier
+  double _sbrUpwardMultiplier = 1.5;
   
   // Cloud configuration
-  final CloudService _cloud = CloudService();
+  late final CloudService _cloud;
   String _cloudBaseUrl = '';
   String _cloudDeviceToken = '';
   
   // App Updates
   bool _nightlyUpdatesEnabled = false;
+  bool _unstableUpdatesEnabled = false;
   
   Timer? _statDisplayTimer;
   StreamSubscription<DeviceConnectionState>? _nativeConnSub;
@@ -60,9 +65,11 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    _cloud = context.read<CloudService>();
     _loadPersisted();
     _loadPersistedRates();
     _loadFakeSyncSettings();
+    _loadSbrSettings();
     _loadCloudConfig();
     
     _nativeConnSub = widget.device.connectionState$.listen((state) {
@@ -80,6 +87,20 @@ class _SettingsPageState extends State<SettingsPage> {
     _statDisplayTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _loadSbrSettings() async {
+    await GameSettings.load();
+    if (!mounted) return;
+    setState(() {
+      _sbrUpwardMultiplier = GameSettings.sbrUpwardSpeedMultiplier;
+    });
+  }
+
+  Future<void> _saveSbrUpwardMultiplier(double v) async {
+    await GameSettings.setSbrUpwardSpeedMultiplier(v);
+    if (!mounted) return;
+    setState(() => _sbrUpwardMultiplier = v);
   }
   
   @override
@@ -99,6 +120,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
       _nightlyUpdatesEnabled = prefs.getBool('nightly_updates_enabled') ?? false;
+      _unstableUpdatesEnabled = prefs.getBool('unstable_updates_enabled') ?? false;
       _loading = false;
     });
   }
@@ -138,6 +160,19 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _saveNightlyUpdates(bool val) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('nightly_updates_enabled', val);
+    
+    // If nightly is turned off, unstable must also be considered off
+    if (!val && _unstableUpdatesEnabled) {
+      setState(() => _unstableUpdatesEnabled = false);
+      await prefs.setBool('unstable_updates_enabled', false);
+    }
+    
+    UpdateService().checkForUpdates();
+  }
+  
+  Future<void> _saveUnstableUpdates(bool val) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('unstable_updates_enabled', val);
     UpdateService().checkForUpdates();
   }
   
@@ -253,6 +288,22 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          // Nightly Updates (top of Advanced Settings for easy access)
+          AppUpdatesSection(
+            nightlyEnabled: _nightlyUpdatesEnabled,
+            unstableEnabled: _unstableUpdatesEnabled,
+            onNightlyChanged: (val) {
+              setState(() => _nightlyUpdatesEnabled = val);
+              _saveNightlyUpdates(val);
+            },
+            onUnstableChanged: (val) {
+              setState(() => _unstableUpdatesEnabled = val);
+              _saveUnstableUpdates(val);
+            },
+          ),
+          
+          const SizedBox(height: 12),
+          
           // Stat Rate Controls
           StatRatesSection(
             hungerDecayRate: _hungerDecayRate,
@@ -301,17 +352,6 @@ class _SettingsPageState extends State<SettingsPage> {
           
           const SizedBox(height: 12),
           
-          // App Updates
-          AppUpdatesSection(
-            nightlyEnabled: _nightlyUpdatesEnabled,
-            onNightlyChanged: (val) {
-              setState(() => _nightlyUpdatesEnabled = val);
-              _saveNightlyUpdates(val);
-            },
-          ),
-          
-          const SizedBox(height: 12),
-          
           // Cloud Sync
           CloudSyncSection(
             cloud: _cloud,
@@ -339,6 +379,33 @@ class _SettingsPageState extends State<SettingsPage> {
                 _saveFakeSyncSettings();
               }
             },
+          ),
+          const SizedBox(height: 12),
+          // SBR Upward Speed Multiplier
+          Card(
+            color: Colors.grey[900],
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SBR Upward Speed', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text('Make the ball ascend faster than it descends. Adjust to taste.', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Slider(
+                    value: _sbrUpwardMultiplier,
+                    min: 1.0,
+                    max: 3.0,
+                    divisions: 20,
+                    label: _sbrUpwardMultiplier.toStringAsFixed(2) + '×',
+                    onChanged: (v) {
+                      setState(() => _sbrUpwardMultiplier = v);
+                    },
+                    onChangeEnd: (v) => _saveSbrUpwardMultiplier(v),
+                  ),
+                ],
+              ),
+            ),
           ),
           
           // Device-specific buttons (only when connected)

@@ -1,51 +1,80 @@
+import 'dart:convert';
 import 'dart:math';
-
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive/hive.dart';
+
+part 'pet_stats.g.dart';
 
 /// Manages the hunger and happiness stats for a pet.
 /// Stats trickle over time based on configurable rates.
 /// Supports persistence for background stat updates.
-class PetStats {
+@HiveType(typeId: 1)
+class PetStats extends HiveObject {
   /// Hunger level: 0.0 (starving) to 1.0 (full)
+  @HiveField(0)
   double _hunger;
   
   /// Happiness level: 0.0 (miserable) to 1.0 (ecstatic)
+  @HiveField(1)
   double _happiness;
   
   /// Happiness buffer accumulated while app was in background and linked
+  @HiveField(2)
   double _happinessBuffer;
 
   /// Rate at which hunger decreases per second (always active)
+  @HiveField(3)
   double hungerDecayRate;
   
   /// Rate at which happiness increases per second (when device is synced)
+  @HiveField(4)
   double happinessGainRate;
   
   /// Rate at which happiness decreases per second (when device is NOT synced)
+  @HiveField(5)
   double happinessDecayRate;
   
   /// Timestamp of last update (for background calculations)
+  @HiveField(6)
   DateTime _lastUpdateTime;
   
   /// Callback triggered when wellbeing drops below threshold
   void Function()? onLowWellbeing;
   
   /// Threshold for low wellbeing notification (0.0 to 1.0)
+  @HiveField(7)
   double lowWellbeingThreshold;
   
   /// Whether low wellbeing notification was already sent (resets when recovered)
   bool _lowWellbeingNotified = false;
 
+  // Save lock — ensures concurrent saveToPrefs() calls are serialised.
+  Future<void> _saveLock = Future.value();
+  
+  bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
+
+  // Fail-safe to prevent overwriting SharedPreferences if load fails
+  bool _canSave = false;
+
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+
   /// Gold coins (for clothing)
+  @HiveField(8)
   int _goldCoins = 0;
   
   /// Silver coins (for food)
+  @HiveField(9)
   int _silverCoins = 0;
 
   /// IDs of unlocked clothing items
+  @HiveField(10)
   List<String> _unlockedClothingIds = [];
 
   /// Map of slot name to clothing ID for equipped items
+  @HiveField(11)
   Map<String, String> _equippedClothing = {};
 
   PetStats({
@@ -71,6 +100,13 @@ class PetStats {
         _lastUpdateTime = lastUpdateTime ?? DateTime.now();
 
   // ============ GETTERS ============
+
+  /// Mark this instance as ready for saves.
+  /// Must be called after Hive rehydration so that save() is not a no-op.
+  void markReady() {
+    _isInitialized = true;
+    _canSave = true;
+  }
   
   /// Current hunger value (0.0 to 1.0)
   double get hunger => _hunger;
@@ -80,6 +116,9 @@ class PetStats {
   
   /// Current happiness buffer (accumulated while linked in background)
   double get happinessBuffer => _happinessBuffer;
+
+  /// Timestamp of last update
+  DateTime get lastUpdateTime => _lastUpdateTime;
 
   /// Current gold coins (Clothing)
   int get goldCoins => _goldCoins;
@@ -170,7 +209,7 @@ class PetStats {
   /// Feed the pet - increases hunger by amount
   void feed({double amount = 0.25}) {
     _hunger = min(1.0, _hunger + amount);
-    saveToPrefs();
+    save();
   }
 
   /// Reset stats to full
@@ -179,7 +218,8 @@ class PetStats {
     _happiness = 1.0;
     _happinessBuffer = 0.0;
     _lastUpdateTime = DateTime.now();
-    saveToPrefs();
+    _canSave = true; // Safe to save now
+    save();
   }
 
   // ============ MONEY METHODS ============
@@ -188,7 +228,7 @@ class PetStats {
   void addGold(int amount) {
     if (amount > 0) {
       _goldCoins += amount;
-      saveToPrefs();
+      save();
     }
   }
 
@@ -196,7 +236,7 @@ class PetStats {
   bool spendGold(int amount) {
     if (amount > 0 && _goldCoins >= amount) {
       _goldCoins -= amount;
-      saveToPrefs();
+      save();
       return true;
     }
     return false;
@@ -206,7 +246,7 @@ class PetStats {
   void addSilver(int amount) {
     if (amount > 0) {
       _silverCoins += amount;
-      saveToPrefs();
+      save();
     }
   }
 
@@ -214,7 +254,7 @@ class PetStats {
   bool spendSilver(int amount) {
     if (amount > 0 && _silverCoins >= amount) {
       _silverCoins -= amount;
-      saveToPrefs();
+      save();
       return true;
     }
     return false;
@@ -226,7 +266,7 @@ class PetStats {
   void unlockClothing(String id) {
     if (!_unlockedClothingIds.contains(id)) {
       _unlockedClothingIds.add(id);
-      saveToPrefs();
+      save();
     }
   }
 
@@ -236,13 +276,13 @@ class PetStats {
   /// Equip clothing item (replaces existing item in same slot)
   void equipClothing(String slotName, String id) {
     _equippedClothing[slotName] = id;
-    saveToPrefs();
+    save();
   }
 
   /// Unequip clothing from slot
   void unequipClothing(String slotName) {
     _equippedClothing.remove(slotName);
-    saveToPrefs();
+    save();
   }
 
 
@@ -250,12 +290,13 @@ class PetStats {
   void applyMissionReward(int gold, double happiness) {
     addGold(gold);
     _happiness = (_happiness + happiness).clamp(0.0, 1.0);
-    saveToPrefs();
+    save();
   }
 
   // ============ INVENTORY METHODS ============
 
   /// Map of food item ID to quantity owned
+  @HiveField(12)
   Map<String, int> _foodInventory = {};
 
   /// Get current food inventory
@@ -265,7 +306,7 @@ class PetStats {
   void addFood(String id, int quantity) {
     if (quantity > 0) {
       _foodInventory[id] = (_foodInventory[id] ?? 0) + quantity;
-      saveToPrefs();
+      save();
     }
   }
 
@@ -277,7 +318,7 @@ class PetStats {
       if (_foodInventory[id] == 0) {
         _foodInventory.remove(id);
       }
-      saveToPrefs();
+      save();
       return true;
     }
     return false;
@@ -288,70 +329,241 @@ class PetStats {
 
   // ============ PERSISTENCE ============
 
-  /// Save current state to SharedPreferences
-  Future<void> saveToPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    _lastUpdateTime = DateTime.now();
-    
-    await prefs.setDouble('pet_hunger', _hunger);
-    await prefs.setDouble('pet_happiness', _happiness);
-    await prefs.setDouble('pet_happiness_buffer', _happinessBuffer);
-    await prefs.setInt('pet_gold_coins', _goldCoins);
-    await prefs.setInt('pet_silver_coins', _silverCoins);
-    await prefs.setStringList('pet_unlocked_clothing', _unlockedClothingIds);
-    final equippedList = _equippedClothing.entries.map((e) => '${e.key}:${e.value}').toList();
-    await prefs.setStringList('pet_equipped_clothing', equippedList);
-    
-    // Save inventory
-    final inventoryList = _foodInventory.entries.map((e) => '${e.key}:${e.value}').toList();
-    await prefs.setStringList('pet_food_inventory', inventoryList);
-    
-    await prefs.setInt('pet_last_update', _lastUpdateTime.millisecondsSinceEpoch);
+  // Single SharedPreferences key for the entire stats snapshot.
+  // One atomic write is far less likely to be torn by a mid-save process kill
+  // than 13 individual sequential writes.
+  static const String _bundleKey = 'pet_stats_bundle';
+
+
+  /// Restore state from a decoded JSON map. Returns true if a saved
+  /// timestamp was found (needed to decide whether to apply background updates).
+  bool _fromJson(Map<String, dynamic> json) {
+    _hunger = (json['hunger'] as num?)?.toDouble() ?? _hunger;
+    _happiness = (json['happiness'] as num?)?.toDouble() ?? _happiness;
+    _happinessBuffer = (json['happinessBuffer'] as num?)?.toDouble() ?? 0.0;
+    _goldCoins = (json['goldCoins'] as int?) ?? 0;
+    _silverCoins = (json['silverCoins'] as int?) ?? 0;
+    _unlockedClothingIds =
+        List<String>.from(json['unlockedClothing'] as List? ?? []);
+    _equippedClothing =
+        Map<String, String>.from(json['equippedClothing'] as Map? ?? {});
+    final inv = json['foodInventory'] as Map?;
+    _foodInventory = inv != null
+        ? inv.map((k, v) => MapEntry(k as String, (v as num).toInt()))
+        : {};
+    hungerDecayRate =
+        (json['hungerDecayRate'] as num?)?.toDouble() ?? hungerDecayRate;
+    happinessGainRate =
+        (json['happinessGainRate'] as num?)?.toDouble() ?? happinessGainRate;
+    happinessDecayRate =
+        (json['happinessDecayRate'] as num?)?.toDouble() ?? happinessDecayRate;
+    lowWellbeingThreshold =
+        (json['lowWellbeingThreshold'] as num?)?.toDouble() ??
+            lowWellbeingThreshold;
+    final lastMs = json['lastUpdateMs'] as int?;
+    if (lastMs != null) {
+      _lastUpdateTime = DateTime.fromMillisecondsSinceEpoch(lastMs);
+      return true;
+    }
+    return false;
   }
 
-  /// Load state from SharedPreferences and apply background updates
-  Future<void> loadFromPrefs({required bool isDeviceSynced}) async {
-    final prefs = await SharedPreferences.getInstance();
-    
+  /// Read individual legacy SharedPreferences keys written before the bundle
+  /// format was introduced. Returns true if a saved timestamp was found.
+  bool _loadLegacyKeys(SharedPreferences prefs) {
     _hunger = prefs.getDouble('pet_hunger') ?? _hunger;
     _happiness = prefs.getDouble('pet_happiness') ?? _happiness;
     _happinessBuffer = prefs.getDouble('pet_happiness_buffer') ?? 0.0;
     _goldCoins = prefs.getInt('pet_gold_coins') ?? 0;
     _silverCoins = prefs.getInt('pet_silver_coins') ?? 0;
-    _unlockedClothingIds = prefs.getStringList('pet_unlocked_clothing') ?? [];
-    
+    _unlockedClothingIds =
+        prefs.getStringList('pet_unlocked_clothing') ?? [];
     final equippedList = prefs.getStringList('pet_equipped_clothing') ?? [];
     _equippedClothing.clear();
     for (final entry in equippedList) {
       final parts = entry.split(':');
-      if (parts.length == 2) {
-        _equippedClothing[parts[0]] = parts[1];
-      }
+      if (parts.length == 2) _equippedClothing[parts[0]] = parts[1];
     }
-    
-    // Load inventory
     final inventoryList = prefs.getStringList('pet_food_inventory') ?? [];
     _foodInventory.clear();
     for (final entry in inventoryList) {
       final parts = entry.split(':');
       if (parts.length == 2) {
         final qty = int.tryParse(parts[1]);
-        if (qty != null && qty > 0) {
-          _foodInventory[parts[0]] = qty;
-        }
+        if (qty != null && qty > 0) _foodInventory[parts[0]] = qty;
       }
     }
+    hungerDecayRate =
+        prefs.getDouble('pet_hunger_decay_rate') ?? hungerDecayRate;
+    happinessGainRate =
+        prefs.getDouble('pet_happiness_gain_rate') ?? happinessGainRate;
+    happinessDecayRate =
+        prefs.getDouble('pet_happiness_decay_rate') ?? happinessDecayRate;
+    lowWellbeingThreshold =
+        prefs.getDouble('pet_low_wellbeing_threshold') ?? lowWellbeingThreshold;
+    final lastMs = prefs.getInt('pet_last_update');
+    if (lastMs != null) {
+      _lastUpdateTime = DateTime.fromMillisecondsSinceEpoch(lastMs);
+      return true;
+    }
+    return false;
+  }
+
+  /// Enqueue a save. Concurrent callers are serialised — each waits for the
+  /// previous save to finish before starting its own write.
+  Future<void> save() {
+    if (!_isInitialized || !_canSave) return Future.value();
+    _saveLock =
+        _saveLock.catchError((_) {}).then((_) => _doSave());
+    return _saveLock;
+  }
+
+  Future<void> _doSave() async {
+    final now = DateTime.now();
+    _lastUpdateTime = now;
     
-    final lastUpdateMs = prefs.getInt('pet_last_update');
+    debugPrint('[PetStats] SAVE START (Hive)');
     
-    if (lastUpdateMs != null) {
-      _lastUpdateTime = DateTime.fromMillisecondsSinceEpoch(lastUpdateMs);
-      applyBackgroundUpdates(wasDeviceSynced: isDeviceSynced);
-      if (isDeviceSynced) applyHappinessBuffer();
+    try {
+      if (isInBox) {
+        await super.save();
+        debugPrint('[PetStats] SAVE SUCCESS (Hive) - Timestamp: $now');
+        
+        // Task 1: Mirror to SharedPreferences for native background service
+        await _mirrorToPrefs();
+      } else {
+        debugPrint('[PetStats] SAVE FAILED - Not in a Hive box!');
+        // Even if not in box (e.g. initial setup), we might want to mirror
+        await _mirrorToPrefs();
+      }
+    } catch (e) {
+      debugPrint('[PetStats] SAVE ERROR: $e');
+    }
+  }
+
+  /// Mirror critical stats to SharedPreferences for the native background service.
+  /// This ensures the service has access to the latest Hive data.
+  Future<void> _mirrorToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 1. Write Atomic Bundle (Preferred by new rehydration logic)
+      final bundle = toJson();
+      await prefs.setString(_bundleKey, jsonEncode(bundle));
+
+      // 2. Write Individual Keys (Required by native Kotlin service)
+      await prefs.setDouble('pet_hunger', _hunger);
+      await prefs.setDouble('pet_happiness', _happiness);
+      await prefs.setInt('pet_last_update', _lastUpdateTime.millisecondsSinceEpoch);
+      await prefs.setDouble('pet_low_wellbeing_threshold', lowWellbeingThreshold);
+      
+      // Also mirror decay rates if they've changed
+      await prefs.setDouble('pet_hunger_decay_rate', hungerDecayRate);
+      await prefs.setDouble('pet_happiness_decay_rate', happinessDecayRate);
+      await prefs.setDouble('pet_happiness_gain_rate', happinessGainRate);
+      
+      debugPrint('[PetStats] Mirror to SharedPreferences SUCCESS (Bundle + Keys)');
+    } catch (e) {
+      debugPrint('[PetStats] Mirror to SharedPreferences FAILED: $e');
+    }
+  }
+
+  /// Convert to JSON map for bundle persistence.
+  Map<String, dynamic> toJson() {
+    return {
+      'hunger': _hunger,
+      'happiness': _happiness,
+      'happinessBuffer': _happinessBuffer,
+      'goldCoins': _goldCoins,
+      'silverCoins': _silverCoins,
+      'unlockedClothing': _unlockedClothingIds,
+      'equippedClothing': _equippedClothing,
+      'foodInventory': _foodInventory,
+      'hungerDecayRate': hungerDecayRate,
+      'happinessGainRate': happinessGainRate,
+      'happinessDecayRate': happinessDecayRate,
+      'lowWellbeingThreshold': lowWellbeingThreshold,
+      'lastUpdateMs': _lastUpdateTime.millisecondsSinceEpoch,
+    };
+  }
+
+  /// Rehydrate stats from a map (bundle).
+  /// Used by Bootstrapper for native-to-dart rehydration.
+  void rehydrateFromMap(Map<String, dynamic> json) {
+    _hunger = (json['hunger'] as num?)?.toDouble() ?? _hunger;
+    _happiness = (json['happiness'] as num?)?.toDouble() ?? _happiness;
+    _happinessBuffer = (json['happinessBuffer'] as num?)?.toDouble() ?? _happinessBuffer;
+    _goldCoins = (json['goldCoins'] as int?) ?? _goldCoins;
+    _silverCoins = (json['silverCoins'] as int?) ?? _silverCoins;
+    
+    final lastMs = json['lastUpdateMs'] as int?;
+    if (lastMs != null) {
+      _lastUpdateTime = DateTime.fromMillisecondsSinceEpoch(lastMs);
     }
     
-    await saveToPrefs();
+    debugPrint('[PetStats] Rehydrated from map - Hunger: ${_hunger.toStringAsFixed(2)}');
+  }
+
+  /// Load state from SharedPreferences and apply background updates.
+  /// Reads the atomic bundle key; falls back to legacy individual keys
+  /// for users upgrading from an earlier version.
+  Future<void> loadFromPrefs({required bool isDeviceSynced}) async {
+    if (_isLoading) {
+      debugPrint('[PetStats] LOAD SKIPPED - Already loading');
+      return;
+    }
+    
+    debugPrint('[PetStats] LOAD START - isDeviceSynced: $isDeviceSynced');
+    _isLoading = true;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      bool hadSavedState = false;
+      bool wasLegacy = false;
+
+      final bundleJson = prefs.getString(_bundleKey);
+      if (bundleJson != null) {
+        try {
+          hadSavedState = _fromJson(
+              jsonDecode(bundleJson) as Map<String, dynamic>);
+          _canSave = hadSavedState;
+          debugPrint('[PetStats] LOAD - Found bundle data');
+        } catch (e) {
+          debugPrint('[PetStats] Bundle parse error — falling back to legacy keys: $e');
+          hadSavedState = _loadLegacyKeys(prefs);
+          wasLegacy = hadSavedState;
+          _canSave = hadSavedState;
+        }
+      } else {
+        // First launch after update: migrate from old individual keys.
+        hadSavedState = _loadLegacyKeys(prefs);
+        wasLegacy = hadSavedState;
+        _canSave = hadSavedState;
+        if (hadSavedState) debugPrint('[PetStats] LOAD - Found legacy data for migration');
+      }
+
+      if (hadSavedState) {
+        applyBackgroundUpdates(wasDeviceSynced: isDeviceSynced);
+        if (isDeviceSynced) applyHappinessBuffer();
+      } else {
+        debugPrint('[PetStats] LOAD - No saved state found, using defaults');
+        _canSave = true; // Safe to save defaults for new user
+      }
+      
+      _isInitialized = true;
+      
+      // ONLY commit to bundle if we actually migrated legacy data or changed something.
+      // If we just loaded defaults for a new user, we don't need to force a save immediately
+      // which might race with other initializations.
+      if (wasLegacy) {
+        debugPrint('[PetStats] LOAD - Committing migrated legacy data to bundle');
+        await save();
+      }
+      
+      debugPrint('[PetStats] LOAD COMPLETE - Hunger: ${_hunger.toStringAsFixed(2)}, Gold: $_goldCoins');
+    } finally {
+      _isLoading = false;
+    }
   }
 
   /// Create a copy with modified values

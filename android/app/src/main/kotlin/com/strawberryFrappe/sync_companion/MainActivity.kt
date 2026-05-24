@@ -18,6 +18,9 @@ import android.content.IntentFilter
 import android.preference.PreferenceManager
 import android.util.Base64
 import android.util.Log
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -151,8 +154,11 @@ class MainActivity : FlutterActivity() {
 						val map = mutableMapOf<String, Any?>()
 						map["status"] = connected
 						map["deviceId"] = did
+						map["humanDetected"] = prefs.getBoolean("native_human_detected", false)
+						map["bpm"] = prefs.getInt("last_bpm", 0)
+						map["spo2"] = prefs.getInt("last_spo2", 0)
 						if (lastList != null) map["lastBytes"] = lastList
-						try { Log.i("MainActivity", "requestNativeStatus replying prefs status=$connected device=$did lastBytes=${lastList?.size}") } catch (e: Exception) {}
+						try { Log.i("MainActivity", "requestNativeStatus replying prefs status=$connected humanDetected=${map["humanDetected"]} device=$did lastBytes=${lastList?.size}") } catch (e: Exception) {}
 						result.success(map)
 					} catch (e: Exception) {
 						result.error("request_failed", e.toString(), null)
@@ -229,6 +235,21 @@ class MainActivity : FlutterActivity() {
 						result.error("pet_alert_failed", e.toString(), null)
 					}
 				}
+				"requestBatteryOptimization" -> {
+					try {
+						val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+						if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+							val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+							intent.data = Uri.parse("package:$packageName")
+							startActivity(intent)
+							result.success(false) // requested, not yet granted
+						} else {
+							result.success(true) // already exempted
+						}
+					} catch (e: Exception) {
+						result.error("battery_opt_failed", e.toString(), null)
+					}
+				}
 				else -> result.notImplemented()
 			}
 		}
@@ -252,8 +273,11 @@ class MainActivity : FlutterActivity() {
 					val m = mutableMapOf<String, Any?>()
 					m["status"] = connected
 					m["deviceId"] = did
+					m["humanDetected"] = prefs.getBoolean("native_human_detected", false)
+					m["bpm"] = prefs.getInt("last_bpm", 0)
+					m["spo2"] = prefs.getInt("last_spo2", 0)
 					if (lastList != null) m["lastBytes"] = lastList
-					try { Log.i("MainActivity", "onListen emitting saved status=$connected device=$did lastBytes=${lastList?.size}") } catch (e: Exception) {}
+					try { Log.i("MainActivity", "onListen emitting saved status=$connected humanDetected=${m["humanDetected"]} device=$did lastBytes=${lastList?.size}") } catch (e: Exception) {}
 					events?.success(m)
 					try {
 						val intent = Intent(this@MainActivity, BleForegroundService::class.java)
@@ -277,8 +301,16 @@ class MainActivity : FlutterActivity() {
 								}
 								"com.strawberryFrappe.sync_companion.BLE_STATUS" -> {
 									val connected = intent.getBooleanExtra("connected", false)
-									events?.success(mapOf("status" to connected))
-									try { Log.i("MainActivity", "onReceive BLE_STATUS status=$connected") } catch (e: Exception) {}
+									val humanDetected = intent.getBooleanExtra("humanDetected", false)
+									val bpm = intent.getIntExtra("bpm", 0)
+									val spo2 = intent.getIntExtra("spo2", 0)
+									events?.success(mapOf(
+										"status" to connected,
+										"humanDetected" to humanDetected,
+										"bpm" to bpm,
+										"spo2" to spo2
+									))
+									try { Log.i("MainActivity", "onReceive BLE_STATUS status=$connected humanDetected=$humanDetected bpm=$bpm") } catch (e: Exception) {}
 								}
 							}
 						} catch (e: Exception) { }

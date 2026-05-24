@@ -4,28 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:Therapets/l10n/app_localizations.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-// Note: using bundled `Monocraft` font; removed runtime google_fonts usage.
+import 'package:provider/provider.dart';
 
+import 'core/app_bootstrapper.dart';
+import 'core/app_lifecycle_manager.dart';
 import 'screens/game_screen.dart';
-import 'services/cloud/cloud_service.dart';
-import 'services/cloud/telemetry_tracker.dart';
 import 'services/locale_service.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Hive for persistent storage
-  await Hive.initFlutter();
-  
-  // Initialize locale service (language preference + device detection)
-  await LocaleService().init();
-  
-  // Initialize cloud service (event queue + connectivity listener)
-  await CloudService().init();
-  
-  // Initialize telemetry tracker (sync status monitoring)
-  await TelemetryTracker().init();
   
   // Initialize communication port between task isolate and main isolate.
   FlutterForegroundTask.initCommunicationPort();
@@ -33,40 +20,106 @@ Future<void> main() async {
   // Initialize the foreground task plugin with conservative options.
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'sync_companion_fg',
+      channelId: 'therapets_fg',
       channelName: 'Therapets Service',
       channelDescription: 'Foreground service for keeping BLE active',
       onlyAlertOnce: true,
     ),
-    iosNotificationOptions: IOSNotificationOptions(
+    iosNotificationOptions: const IOSNotificationOptions(
       showNotification: false,
       playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
       eventAction: ForegroundTaskEventAction.repeat(5000),
-      autoRunOnBoot: false,
+      autoRunOnBoot: true,
       autoRunOnMyPackageReplaced: false,
       allowWakeLock: true,
       allowWifiLock: true,
     ),
   );
 
-  runApp(const SyncCompanionApp());
+  runApp(const BootstrapWrapper());
 }
 
-class SyncCompanionApp extends StatelessWidget {
-  const SyncCompanionApp({super.key});
+/// Wrapper that handles the AppBootstrapper Future and shows a loading state.
+class BootstrapWrapper extends StatefulWidget {
+  const BootstrapWrapper({super.key});
+
+  @override
+  State<BootstrapWrapper> createState() => _BootstrapWrapperState();
+}
+
+class _BootstrapWrapperState extends State<BootstrapWrapper> {
+  late Future<BootstrapResult> _bootstrapFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bootstrapFuture = AppBootstrapper.init();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<BootstrapResult>(
+      future: _bootstrapFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const MaterialApp(
+            home: Scaffold(
+              backgroundColor: Colors.white,
+              body: Center(
+                child: CircularProgressIndicator(color: Colors.black),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.hasError || !snapshot.hasData) {
+          return MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: Text('Initialization Error: ${snapshot.error}'),
+              ),
+            ),
+          );
+        }
+
+        final bootstrap = snapshot.data!;
+        
+        return MultiProvider(
+          providers: [
+            Provider.value(value: bootstrap.cloudService),
+            Provider.value(value: bootstrap.deviceService),
+            Provider.value(value: bootstrap.missionService),
+            Provider.value(value: bootstrap.petStats),
+            Provider.value(value: bootstrap.notificationService),
+            ChangeNotifierProvider.value(value: bootstrap.localeService),
+          ],
+          child: AppLifecycleManager(
+            petStats: bootstrap.petStats,
+            missionService: bootstrap.missionService,
+            deviceService: bootstrap.deviceService,
+            child: const TherapetsApp(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class TherapetsApp extends StatelessWidget {
+  const TherapetsApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final base = ThemeData.light();
     final appTextTheme = base.textTheme.apply(fontFamily: 'Monocraft', bodyColor: Colors.black);
-    return ListenableBuilder(
-      listenable: LocaleService(),
-      builder: (context, _) {
+    
+    return Consumer<LocaleService>(
+      builder: (context, localeService, _) {
         return MaterialApp(
           title: 'Therapets',
-          locale: LocaleService().locale,
+          locale: localeService.locale,
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: const [
             AppLocalizations.delegate,
@@ -100,7 +153,5 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) => const SyncCompanionApp();
+  Widget build(BuildContext context) => const TherapetsApp();
 }
-
-// `HomePage` and its implementation are moved into `lib/home_page.dart`.

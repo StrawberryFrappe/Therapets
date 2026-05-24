@@ -158,6 +158,12 @@ abstract class AppLocalizations {
   /// **'LANGUAGE'**
   String get language;
 
+  /// No description provided for @appVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'App Version'**
+  String get appVersion;
+
   /// No description provided for @appUpdates.
   ///
   /// In en, this message translates to:
@@ -175,6 +181,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Automatically detect and update to pre-release (dev) builds.'**
   String get nightlyUpdatesDesc;
+
+  /// No description provided for @unstableUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'Unstable Builds'**
+  String get unstableUpdates;
+
+  /// No description provided for @unstableUpdatesDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Also allow automatic updates for experimental (unstable) builds.'**
+  String get unstableUpdatesDesc;
 
   /// No description provided for @dailyMissions.
   ///
