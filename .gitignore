@@ -85,5 +85,5 @@ artifacts/*
 !artifacts/*.md
 
 # Antigravity Factory setup
-agents/
-FACTORY.md
+!agents/
+!FACTORY.md
