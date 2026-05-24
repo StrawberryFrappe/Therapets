@@ -133,7 +133,6 @@ class GameScreenController extends ChangeNotifier {
     switch (state) {
       case AppLifecycleState.paused:
         _isPaused = true;
-        await saveStats();
         break;
       case AppLifecycleState.resumed:
         _isPaused = false;
@@ -141,7 +140,6 @@ class GameScreenController extends ChangeNotifier {
         // AppLifecycleManager already calls deviceService.onAppResumed()
         break;
       case AppLifecycleState.detached:
-        await saveStats();
         break;
       default:
         break;
