@@ -55,15 +55,19 @@ class UpdateService {
         if (isNightlyEnabled && rawData is List && rawData.isNotEmpty) {
           // GitHub's /releases endpoint sorts stable releases before
           // prereleases. Find the latest entry that matches user preference.
-          final Map<String, dynamic>? targetEntry = (rawData as List).firstWhere(
-            (r) {
-              final tagName = (r['tag_name'] as String).toLowerCase();
-              if (isUnstableEnabled && tagName.contains('unstable')) return true;
-              if (tagName.contains('nightly')) return true;
-              return false;
-            },
-            orElse: () => null,
-          );
+          Map<String, dynamic>? targetEntry;
+          if (isUnstableEnabled) {
+            targetEntry = (rawData as List).firstWhere(
+              (r) => (r['tag_name']?.toString().toLowerCase() ?? '').contains('unstable'),
+              orElse: () => null,
+            );
+          }
+          if (targetEntry == null) {
+            targetEntry = (rawData as List).firstWhere(
+              (r) => (r['tag_name']?.toString().toLowerCase() ?? '').contains('nightly'),
+              orElse: () => null,
+            );
+          }
           if (targetEntry == null) return;
           data = targetEntry;
         } else if (!isNightlyEnabled && rawData is Map<String, dynamic>) {

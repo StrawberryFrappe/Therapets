@@ -140,6 +140,9 @@ class DeviceStatusAggregator {
     _consecutiveNoHumanSamples = 0;
     _humanDetectionHistory.clear();
     _syncGraceTimer?.cancel();
+    _syncGraceTimer = null;
+    _staleSeconds = 0;
+    _lastRecordedState = false;
   }
 
   void dispose() {
