@@ -36,13 +36,13 @@ class _SBRScreenState extends State<SBRScreen> {
   void initState() {
     super.initState();
     WakelockPlus.enable();
-    DeviceService().registerMinigameStart();
+    widget.deviceService.registerMinigameStart();
   }
 
   @override
   void dispose() {
     WakelockPlus.disable();
-    DeviceService().registerMinigameEnd();
+    widget.deviceService.registerMinigameEnd();
     super.dispose();
   }
 

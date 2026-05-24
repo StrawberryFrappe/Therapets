@@ -17,7 +17,7 @@ class CloudManager(private val context: Context) {
 
     fun logSyncStatus(synced: Boolean, avgBpm: Int?, avgSpo2: Int?, avgTemp: Double?) {
         val payload = JSONObject().apply {
-            put("timestamp", java.time.Instant.now().toString())
+            put("timestamp", System.currentTimeMillis())
             put("synced", synced)
             val vitals = JSONObject()
             avgBpm?.let { if (it > 0) vitals.put("avgBpm", it) }
@@ -36,7 +36,7 @@ class CloudManager(private val context: Context) {
 
     fun logMissionCompleted(missionId: String) {
         val payload = JSONObject().apply {
-            put("timestamp", java.time.Instant.now().toString())
+            put("timestamp", System.currentTimeMillis())
             put("mission_id", missionId)
         }
 
