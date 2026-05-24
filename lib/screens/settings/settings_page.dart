@@ -91,6 +91,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadSbrSettings() async {
     await GameSettings.load();
+    if (!mounted) return;
     setState(() {
       _sbrUpwardMultiplier = GameSettings.sbrUpwardSpeedMultiplier;
     });
@@ -98,6 +99,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _saveSbrUpwardMultiplier(double v) async {
     await GameSettings.setSbrUpwardSpeedMultiplier(v);
+    if (!mounted) return;
     setState(() => _sbrUpwardMultiplier = v);
   }
   

@@ -142,7 +142,7 @@ class MissionService {
           _lastResetDate = DateTime.fromMillisecondsSinceEpoch(lastResetMs);
         }
         final missions = _box.get('missions') as List?;
-        if (missions != null) {
+        if (missions != null && missions.isNotEmpty) {
           _activeMissions = List<Mission>.from(missions);
           _isInitialized = true;
           _canSave = true;
