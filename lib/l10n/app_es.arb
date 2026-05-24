@@ -121,10 +121,10 @@
   "addSilver": "+100 PLATA",
 
   "difficultyLabel": "Dificultad",
-  "difficultyEasy": "Fácil",
-  "difficultyMedium": "Medio",
-  "difficultyHard": "Difícil",
-  "difficultyExtreme": "Extremo",
+  "difficultyEasy": "1",
+  "difficultyMedium": "2",
+  "difficultyHard": "3",
+  "difficultyExtreme": "4",
 
   "scanForDevicesTitle": "Buscar Dispositivos",
   "disconnectForget": "Desconectar y Olvidar",

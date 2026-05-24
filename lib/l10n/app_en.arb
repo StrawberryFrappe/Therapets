@@ -133,10 +133,10 @@
   "addSilver": "+100 SILVER",
 
   "difficultyLabel": "Difficulty",
-  "difficultyEasy": "Easy",
-  "difficultyMedium": "Medium",
-  "difficultyHard": "Hard",
-  "difficultyExtreme": "Extreme",
+  "difficultyEasy": "1",
+  "difficultyMedium": "2",
+  "difficultyHard": "3",
+  "difficultyExtreme": "4",
 
   "scanForDevicesTitle": "Scan for Devices",
   "disconnectForget": "Disconnect & Forget",
