@@ -48,7 +48,7 @@ class AppUpdatesSection extends StatelessWidget {
                 ),
                 value: nightlyEnabled,
                 onChanged: onNightlyChanged,
-                activeColor: Colors.blueAccent,
+                activeThumbColor: Colors.blueAccent,
               ),
               if (nightlyEnabled) ...[
                 const Divider(height: 1, color: Colors.grey),
@@ -65,7 +65,7 @@ class AppUpdatesSection extends StatelessWidget {
                     ),
                     value: unstableEnabled,
                     onChanged: onUnstableChanged,
-                    activeColor: Colors.redAccent,
+                    activeThumbColor: Colors.redAccent,
                   ),
                 ),
               ],

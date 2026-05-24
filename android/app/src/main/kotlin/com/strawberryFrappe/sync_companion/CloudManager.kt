@@ -8,12 +8,13 @@ import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.concurrent.thread
+import java.util.concurrent.Executors
 
 class CloudManager(private val context: Context) {
 
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     private val QUEUE_KEY = "cloud_event_queue"
+    private val executor = Executors.newSingleThreadExecutor()
 
     fun logSyncStatus(synced: Boolean, avgBpm: Int?, avgSpo2: Int?, avgTemp: Double?) {
         val payload = JSONObject().apply {
@@ -49,44 +50,43 @@ class CloudManager(private val context: Context) {
     }
 
     fun logEvent(event: JSONObject) {
-        queueEvent(event)
-        flushQueue()
+        executor.execute {
+            queueEvent(event)
+            flushQueueSync()
+        }
     }
 
     private fun queueEvent(event: JSONObject) {
-        synchronized(this) {
-            val queueString = prefs.getString(QUEUE_KEY, "[]")
-            val queue = try { JSONArray(queueString) } catch (e: Exception) { JSONArray() }
-            queue.put(event)
-            prefs.edit().putString(QUEUE_KEY, queue.toString()).apply()
-        }
+        val queueString = prefs.getString(QUEUE_KEY, "[]")
+        val queue = try { JSONArray(queueString) } catch (e: Exception) { JSONArray() }
+        queue.put(event)
+        prefs.edit().putString(QUEUE_KEY, queue.toString()).apply()
     }
 
     fun flushQueue() {
-        thread {
-            val endpointUrl = getEndpointUrl() ?: return@thread
-            
-            var currentQueue: JSONArray
-            synchronized(this) {
-                val queueString = prefs.getString(QUEUE_KEY, "[]")
-                currentQueue = try { JSONArray(queueString) } catch (e: Exception) { JSONArray() }
-                if (currentQueue.length() == 0) return@thread
-            }
+        executor.execute {
+            flushQueueSync()
+        }
+    }
 
-            val remainingQueue = JSONArray()
+    private fun flushQueueSync() {
+        val endpointUrl = getEndpointUrl() ?: return
+        
+        val queueString = prefs.getString(QUEUE_KEY, "[]")
+        val currentQueue = try { JSONArray(queueString) } catch (e: Exception) { JSONArray() }
+        if (currentQueue.length() == 0) return
 
-            for (i in 0 until currentQueue.length()) {
-                val event = currentQueue.getJSONObject(i)
-                val success = sendPostRequest(endpointUrl, event)
-                if (!success) {
-                    remainingQueue.put(event)
-                }
-            }
+        val remainingQueue = JSONArray()
 
-            synchronized(this) {
-                prefs.edit().putString(QUEUE_KEY, remainingQueue.toString()).apply()
+        for (i in 0 until currentQueue.length()) {
+            val event = currentQueue.getJSONObject(i)
+            val success = sendPostRequest(endpointUrl, event)
+            if (!success) {
+                remainingQueue.put(event)
             }
         }
+
+        prefs.edit().putString(QUEUE_KEY, remainingQueue.toString()).apply()
     }
 
     private fun sendPostRequest(urlStr: String, event: JSONObject): Boolean {

@@ -23,6 +23,7 @@ class UpdateService {
 
   bool _hasChecked = false;
   bool _lastNightlyState = false;
+  bool _lastUnstableState = false;
 
   Future<void> checkForUpdates() async {
     try {
@@ -34,13 +35,14 @@ class UpdateService {
       final isUnstableEnabled = prefs.getBool('unstable_updates_enabled') ?? false;
 
       // If preferences changed since last check, allow re-checking
-      if (_hasChecked && (isNightlyEnabled != _lastNightlyState)) {
+      if (_hasChecked && (isNightlyEnabled != _lastNightlyState || isUnstableEnabled != _lastUnstableState)) {
         _hasChecked = false;
         updateUrlNotifier.value = null;
       }
       if (_hasChecked) return;
       _hasChecked = true;
       _lastNightlyState = isNightlyEnabled;
+      _lastUnstableState = isUnstableEnabled;
 
       final url = isNightlyEnabled
           ? 'https://api.github.com/repos/StrawberryFrappe/Therapets/releases'
@@ -57,13 +59,13 @@ class UpdateService {
           // prereleases. Find the latest entry that matches user preference.
           Map<String, dynamic>? targetEntry;
           if (isUnstableEnabled) {
-            targetEntry = (rawData as List).firstWhere(
+            targetEntry = rawData.firstWhere(
               (r) => (r['tag_name']?.toString().toLowerCase() ?? '').contains('unstable'),
               orElse: () => null,
             );
           }
           if (targetEntry == null) {
-            targetEntry = (rawData as List).firstWhere(
+            targetEntry = rawData.firstWhere(
               (r) => (r['tag_name']?.toString().toLowerCase() ?? '').contains('nightly'),
               orElse: () => null,
             );
