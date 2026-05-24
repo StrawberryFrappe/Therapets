@@ -36,6 +36,8 @@ class SyncDurationMission extends Mission {
   @override
   set progress(double value) => _progress = value;
   @override
+  bool get isCompleted => _progress >= 1.0;
+  @override
   bool get isClaimed => _isClaimed;
   @override
   void markClaimed() => _isClaimed = true;
@@ -44,6 +46,11 @@ class SyncDurationMission extends Mission {
     _progress = 0.0;
     _isClaimed = false;
     _currentDuration = 0.0;
+  }
+  @override
+  void restoreState(double savedProgress, bool claimed) {
+    _progress = savedProgress;
+    _isClaimed = claimed;
   }
 
 
@@ -146,6 +153,8 @@ class MinigamePlayMission extends Mission {
   @override
   set progress(double value) => _progress = value;
   @override
+  bool get isCompleted => _progress >= 1.0;
+  @override
   bool get isClaimed => _isClaimed;
   @override
   void markClaimed() => _isClaimed = true;
@@ -154,6 +163,11 @@ class MinigamePlayMission extends Mission {
     _progress = 0.0;
     _isClaimed = false;
     _currentPlays = 0;
+  }
+  @override
+  void restoreState(double savedProgress, bool claimed) {
+    _progress = savedProgress;
+    _isClaimed = claimed;
   }
 
   @override
@@ -234,6 +248,8 @@ class FeedPetMission extends Mission {
   @override
   set progress(double value) => _progress = value;
   @override
+  bool get isCompleted => _progress >= 1.0;
+  @override
   bool get isClaimed => _isClaimed;
   @override
   void markClaimed() => _isClaimed = true;
@@ -242,6 +258,11 @@ class FeedPetMission extends Mission {
     _progress = 0.0;
     _isClaimed = false;
     _currentFeeds = 0;
+  }
+  @override
+  void restoreState(double savedProgress, bool claimed) {
+    _progress = savedProgress;
+    _isClaimed = claimed;
   }
 
   @override

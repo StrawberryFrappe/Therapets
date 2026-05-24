@@ -55,12 +55,8 @@ class _AppLifecycleManagerState extends State<AppLifecycleManager> with WidgetsB
 
   Future<void> _flushState() async {
     debugPrint('[LifecycleManager] FLUSHING STATE');
-    // In Phase 2, PetStats and Missions are in Hive boxes.
-    // Hive's put/add are usually atomic, but we can call save() if we have custom logic.
-    // For now, PetStats.saveToPrefs was using SharedPreferences. 
-    // We should ensure Hive is flushed if needed.
-    await widget.petStats.save(); // This should be updated to Hive logic
-    await widget.missionService.save(); // This should be updated to Hive logic
+    await widget.petStats.save();
+    await widget.missionService.save();
   }
 
   Future<void> _onResumed() async {
