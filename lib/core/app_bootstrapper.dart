@@ -91,20 +91,18 @@ class AppBootstrapper {
 
     // 5. Initialize Services that depend on others
     final missionService = MissionService(cloudService: cloudService);
-    if (missionBox != null) {
-      try {
-        await missionService.init(petStats, missionBox).timeout(const Duration(seconds: 5));
-        
-        // Rehydrate background progress for missions (e.g. sync duration)
-        final lastUpdateMs = petStats.lastUpdateTime.millisecondsSinceEpoch;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final elapsedSec = (now - lastUpdateMs) / 1000.0;
-        final isSynced = deviceService.currentDisplayStatus == DeviceDisplayStatus.synced;
-        
-        await missionService.rehydrateBackgroundProgress(elapsedSec, isSynced);
-      } catch (e) {
-        debugPrint('[Bootstrapper] MissionService init failed: $e');
-      }
+    try {
+      await missionService.init(petStats, missionBox).timeout(const Duration(seconds: 5));
+      
+      // Rehydrate background progress for missions (e.g. sync duration)
+      final lastUpdateMs = petStats.lastUpdateTime.millisecondsSinceEpoch;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final elapsedSec = (now - lastUpdateMs) / 1000.0;
+      final isSynced = deviceService.currentDisplayStatus == DeviceDisplayStatus.synced;
+      
+      await missionService.rehydrateBackgroundProgress(elapsedSec, isSynced);
+    } catch (e) {
+      debugPrint('[Bootstrapper] MissionService init failed: $e');
     }
 
     final notificationService = PetNotificationService(localeService: localeService);

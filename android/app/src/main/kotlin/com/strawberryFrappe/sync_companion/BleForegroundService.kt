@@ -19,7 +19,9 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.SharedPreferences
 import android.preference.PreferenceManager
 import android.util.Log
@@ -475,6 +477,16 @@ class BleForegroundService : Service() {
 
 
     private var isScanning = false
+    private var scanTimeoutRunnable: Runnable? = null
+
+    private fun scheduleFallbackReconnect() {
+        reconnectAttempts++
+        val delay = (Math.min(30, 1 shl reconnectAttempts) * 1000).toLong()
+        handler.postDelayed({
+            val did = prefs?.getString(PREF_SAVED_ID, null)
+            if (did != null && gatt == null && !isScanning) scheduleReconnect()
+        }, delay)
+    }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
@@ -483,12 +495,15 @@ class BleForegroundService : Service() {
                 if (targetId == address) {
                     try { adapter?.bluetoothLeScanner?.stopScan(this) } catch (e: Exception) {}
                     isScanning = false
+                    scanTimeoutRunnable?.let { handler.removeCallbacks(it) }
                     connectToDevice(targetId)
                 }
             }
         }
         override fun onScanFailed(errorCode: Int) {
             isScanning = false
+            scanTimeoutRunnable?.let { handler.removeCallbacks(it) }
+            scheduleFallbackReconnect()
         }
     }
 
@@ -500,24 +515,24 @@ class BleForegroundService : Service() {
             val scanner = adapter?.bluetoothLeScanner
             if (scanner != null) {
                 isScanning = true
-                scanner.startScan(scanCallback)
+                val filter = ScanFilter.Builder().setDeviceAddress(targetId).build()
+                val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+                scanner.startScan(listOf(filter), settings, scanCallback)
+                
+                scanTimeoutRunnable = Runnable {
+                    if (isScanning) {
+                        try { scanner.stopScan(scanCallback) } catch (e: Exception) {}
+                        isScanning = false
+                        scheduleFallbackReconnect()
+                    }
+                }
+                handler.postDelayed(scanTimeoutRunnable!!, 10000)
             } else {
-                // Fallback if scanner unavailable
-                reconnectAttempts++
-                val delay = (Math.min(30, 1 shl reconnectAttempts) * 1000).toLong()
-                handler.postDelayed({
-                    val did = prefs?.getString(PREF_SAVED_ID, null)
-                    if (did != null) connectToDevice(did)
-                }, delay)
+                scheduleFallbackReconnect()
             }
         } catch (e: Exception) {
             isScanning = false
-            reconnectAttempts++
-            val delay = (Math.min(30, 1 shl reconnectAttempts) * 1000).toLong()
-            handler.postDelayed({
-                val did = prefs?.getString(PREF_SAVED_ID, null)
-                if (did != null) connectToDevice(did)
-            }, delay)
+            scheduleFallbackReconnect()
         }
     }
 

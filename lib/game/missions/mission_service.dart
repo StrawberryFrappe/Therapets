@@ -44,10 +44,10 @@ class MissionService {
   // Save lock — serialises concurrent save calls so writes never interleave.
   Future<void> _saveLock = Future.value();
 
-  late Box _box;
+  Box? _box;
 
   /// Initialize with PetStats reference and Hive box
-  Future<void> init(PetStats stats, Box box) async {
+  Future<void> init(PetStats stats, Box? box) async {
     _petStats = stats;
     _box = box;
     await _loadMissions();
@@ -136,12 +136,12 @@ class MissionService {
     _isLoading = true;
 
     try {
-      if (_box.isNotEmpty) {
-        final lastResetMs = _box.get('lastResetMs') as int?;
+      if (_box != null && _box!.isNotEmpty) {
+        final lastResetMs = _box!.get('lastResetMs') as int?;
         if (lastResetMs != null) {
           _lastResetDate = DateTime.fromMillisecondsSinceEpoch(lastResetMs);
         }
-        final missions = _box.get('missions') as List?;
+        final missions = _box!.get('missions') as List?;
         if (missions != null && missions.isNotEmpty) {
           _activeMissions = List<Mission>.from(missions);
           _isInitialized = true;
@@ -221,17 +221,19 @@ class MissionService {
   }
 
   Future<void> _doSave() async {
-    debugPrint('[MissionService] SAVE START (Hive)');
-    try {
-      await _box.put('lastResetMs', _lastResetDate.millisecondsSinceEpoch);
-      await _box.put('missions', _activeMissions);
-      debugPrint('[MissionService] SAVE SUCCESS (Hive)');
-      
-      // Mirror to SharedPreferences for atomic rehydration on next startup
-      await _mirrorToPrefs();
-    } catch (e) {
-      debugPrint('[MissionService] SAVE FAILED (Hive): $e');
+    if (_box != null) {
+      debugPrint('[MissionService] SAVE START (Hive)');
+      try {
+        await _box!.put('lastResetMs', _lastResetDate.millisecondsSinceEpoch);
+        await _box!.put('missions', _activeMissions);
+        debugPrint('[MissionService] SAVE SUCCESS (Hive)');
+      } catch (e) {
+        debugPrint('[MissionService] SAVE FAILED (Hive): $e');
+      }
     }
+      
+    // Mirror to SharedPreferences for atomic rehydration on next startup
+    await _mirrorToPrefs();
   }
 
   /// Mirror critical mission state to SharedPreferences for atomic rehydration.
