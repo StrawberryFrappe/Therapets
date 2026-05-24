@@ -43,12 +43,18 @@ class BluetoothService {
   final StreamController<List<ScanResult>> _foundController = StreamController.broadcast();
   final StreamController<BluetoothDevice?> _connectedController = StreamController.broadcast();
   final StreamController<bool> _nativeConnectedController = StreamController.broadcast();
+  final StreamController<bool> _nativeHumanDetectedController = StreamController.broadcast();
+  final StreamController<int> _nativeBpmController = StreamController.broadcast();
+  final StreamController<int> _nativeSpo2Controller = StreamController.broadcast();
   final StreamController<String> _incomingController = StreamController.broadcast();
   final StreamController<List<int>> _incomingRawController = StreamController.broadcast();
 
   Stream<List<ScanResult>> get foundDevices$ => _foundController.stream;
   Stream<BluetoothDevice?> get connectedDevice$ => _connectedController.stream;
   Stream<bool> get nativeConnected$ => _nativeConnectedController.stream;
+  Stream<bool> get nativeHumanDetected$ => _nativeHumanDetectedController.stream;
+  Stream<int> get nativeBpm$ => _nativeBpmController.stream;
+  Stream<int> get nativeSpo2$ => _nativeSpo2Controller.stream;
   Stream<String> get incomingData$ => _incomingController.stream;
   Stream<List<int>> get incomingRaw$ => _incomingRawController.stream;
   
@@ -72,6 +78,16 @@ class BluetoothService {
   String? _savedId;
   bool _nativeEventsAttached = false;
   StreamSubscription? _nativeEventsSub;
+  
+  bool _nativeConnected = false;
+  bool _nativeHumanDetected = false;
+  int _nativeBpm = 0;
+  int _nativeSpo2 = 0;
+
+  bool get isNativeConnected => _nativeConnected;
+  bool get isNativeHumanDetected => _nativeHumanDetected;
+  int get nativeBpm => _nativeBpm;
+  int get nativeSpo2 => _nativeSpo2;
 
   static const MethodChannel _platform = MethodChannel('sync_companion/bluetooth');
   Completer<Map<String, dynamic>>? _pendingPermissionCompleter;
@@ -111,7 +127,7 @@ class BluetoothService {
       // Detect native service and attach EventChannel early.
       bool nativeRunning = false;
       try {
-        nativeRunning = await _platform.invokeMethod('isNativeServiceRunning') == true;
+        nativeRunning = await _platform.invokeMethod('isNativeServiceRunning').timeout(const Duration(seconds: 1)) == true;
       } catch (_) {}
       try {
         _attachNativeEventStream();
@@ -138,7 +154,7 @@ class BluetoothService {
       }
       // Ask for native status and wait for its reply so UI doesn't flip.
       try {
-        final res = await _platform.invokeMethod('requestNativeStatus');
+        final res = await _platform.invokeMethod('requestNativeStatus').timeout(const Duration(seconds: 2));
         if (res is Map) {
           final m = Map<String, dynamic>.from(res);
           _handleNativeStatusMap(m);
@@ -232,9 +248,22 @@ class BluetoothService {
   void _handleNativeStatusMap(Map<String, dynamic> m) {
     try {
       final connected = m['status'] == true;
-      if (BLE_DEBUG) print('BLE: native status map connected=$connected');
-      // Emit canonical native-connected state (use this to reconcile optimistic UI)
+      final humanDetected = m['humanDetected'] == true;
+      final bpm = m['bpm'] as int? ?? 0;
+      final spo2 = m['spo2'] as int? ?? 0;
+      
+      if (BLE_DEBUG) print('BLE: native status map connected=$connected humanDetected=$humanDetected bpm=$bpm');
+      // Update state
+      _nativeConnected = connected;
+      _nativeHumanDetected = humanDetected;
+      _nativeBpm = bpm;
+      _nativeSpo2 = spo2;
+      
+      // Emit canonical native states
       _nativeConnectedController.add(connected);
+      _nativeHumanDetectedController.add(humanDetected);
+      _nativeBpmController.add(bpm);
+      _nativeSpo2Controller.add(spo2);
       if (!connected) {
         _connected = null;
         _connectedController.add(null);
@@ -584,7 +613,7 @@ class BluetoothService {
   /// (e.g., minigames that need telemetry input).
   Future<void> requestNativeStatus() async {
     try {
-      final res = await _platform.invokeMethod('requestNativeStatus');
+      final res = await _platform.invokeMethod('requestNativeStatus').timeout(const Duration(seconds: 2));
       if (res is Map) {
         final m = Map<String, dynamic>.from(res);
         _handleNativeStatusMap(m);
@@ -596,6 +625,9 @@ class BluetoothService {
     _foundController.close();
     _connectedController.close();
     _nativeConnectedController.close();
+    _nativeHumanDetectedController.close();
+    _nativeBpmController.close();
+    _nativeSpo2Controller.close();
     _incomingController.close();
     _incomingRawController.close();
     _scanSub?.cancel();

@@ -195,8 +195,76 @@ class BioSignalProcessor {
   BioData _latestBioData = const BioData();
   BioData get latestBioData => _latestBioData;
   
+  // Last valid reading (persists during transmission pauses)
+  BioData? _lastValidBioData;
+  DateTime? _lastValidBioDataTimestamp;
+  
+  BioData? get lastValidBioData => _lastValidBioData;
+  DateTime? get lastValidBioDataTimestamp => _lastValidBioDataTimestamp;
+  
+  /// Check if last valid reading is still fresh (within timeout period).
+  /// Returns the last valid reading if available and fresh, otherwise null.
+  BioData? getFreshValidReading([Duration timeout = const Duration(seconds: 60)]) {
+    if (_lastValidBioData == null || _lastValidBioDataTimestamp == null) {
+      return null;
+    }
+    
+    final elapsedTime = DateTime.now().difference(_lastValidBioDataTimestamp!);
+    if (elapsedTime > timeout) {
+      return null;
+    }
+    
+    return _lastValidBioData;
+  }
+  
+  /// Pre-seed the processor with values from native service to skip warm-up.
+  void preSeed(int bpm, int spo2) {
+    if (bpm == 0 || spo2 == 0) return;
+    
+    _initialized = true;
+    _fingerDetectedState = true;
+    _consecutiveValidSamples = 100; // Skip finger sustained check
+    _lastValidBpm = bpm;
+    _lastValidSpO2 = spo2;
+    _currentSpO2 = spo2;
+    
+    _bpmHistory.clear();
+    for (int i = 0; i < 5; i++) _bpmHistory.addLast(bpm);
+    
+    _spo2History.clear();
+    for (int i = 0; i < 5; i++) _spo2History.addLast(spo2);
+    
+    _latestBioData = BioData(
+      bpm: bpm,
+      spo2: spo2,
+      sensorConnected: true,
+      fingerDetected: true,
+      humanDetected: true,
+    );
+    
+    // Store as last valid reading with timestamp
+    _lastValidBioData = _latestBioData;
+    _lastValidBioDataTimestamp = DateTime.now();
+    
+    _bioDataController.add(_latestBioData);
+  }
+  
+  int? _previousRawIr;
+  int _consecutiveDroppedSpikes = 0;
+
   /// Process raw IR and RED values from the sensor.
   void process(int rawIr, int rawRed) {
+    // Delta spike protection
+    if (_previousRawIr != null && (rawIr - _previousRawIr!).abs() > 20000) {
+      _consecutiveDroppedSpikes++;
+      if (_consecutiveDroppedSpikes > 50) {
+        _previousRawIr = rawIr;
+        _consecutiveDroppedSpikes = 0;
+      }
+      return;
+    }
+    _consecutiveDroppedSpikes = 0;
+    _previousRawIr = rawIr;
     // Handle sensor error/disconnected state (65535 = 0xFFFF = sensor error)
     if (rawIr == 65535 || rawRed == 65535) {
       _latestBioData = const BioData(
@@ -335,9 +403,9 @@ class BioSignalProcessor {
     // SIMPLIFIED Human Detection (Phase 1: Basic)
     // Start with minimal requirements, add more checks if false positives occur
     // This breaks the circular dependency on needing history before detecting
-    final hasValidVitals = displayBpm >= _minBpmForHuman && 
-                           displayBpm <= _maxBpmForHuman &&
-                           displaySpO2 >= _minSpo2ForHuman;
+    final hasValidVitals = bpm >= _minBpmForHuman && 
+                           bpm <= _maxBpmForHuman &&
+                           validSpO2 >= _minSpo2ForHuman;
     
     // Sustained finger presence check (0.5 second)
     final fingerSustained = _consecutiveValidSamples > 50;
@@ -376,6 +444,12 @@ class BioSignalProcessor {
       fingerDetected: fingerDetected, // Uses the robust raw check
       humanDetected: humanDetected,
     );
+    
+    // Store as last valid reading if human is detected or if we have valid vitals
+    if (humanDetected || (bpm > 0 && validSpO2 > 0)) {
+      _lastValidBioData = _latestBioData;
+      _lastValidBioDataTimestamp = DateTime.now();
+    }
     
     _bioDataController.add(_latestBioData);
   }
@@ -597,6 +671,8 @@ class BioSignalProcessor {
     _sampleCount = 0;
     _resetOnNoFinger();
     _latestBioData = const BioData();
+    _lastValidBioData = null;
+    _lastValidBioDataTimestamp = null;
   }
   
   void dispose() {

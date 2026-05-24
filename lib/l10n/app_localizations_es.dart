@@ -39,14 +39,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get language => 'IDIOMA';
 
   @override
+  String get appVersion => 'Versión de la App';
+
+  @override
   String get appUpdates => 'ACTUALIZACIONES DE LA APLICACIÓN';
 
   @override
-  String get nightlyUpdates => 'Actualizaciones Nocturnas (Nightly)';
+  String get nightlyUpdates => 'Actualizaciones Nightly';
 
   @override
   String get nightlyUpdatesDesc =>
-      'Detectar y actualizar automáticamente a compilaciones preliminares (dev).';
+      'Detectar y actualizar automáticamente a versiones de desarrollo (nightly).';
+
+  @override
+  String get unstableUpdates => 'Versiones Inestables';
+
+  @override
+  String get unstableUpdatesDesc =>
+      'Permitir también actualizaciones automáticas para versiones experimentales (inestables).';
 
   @override
   String get dailyMissions => 'Misiones Diarias';

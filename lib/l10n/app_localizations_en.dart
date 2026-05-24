@@ -39,6 +39,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get language => 'LANGUAGE';
 
   @override
+  String get appVersion => 'App Version';
+
+  @override
   String get appUpdates => 'APP UPDATES';
 
   @override
@@ -47,6 +50,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get nightlyUpdatesDesc =>
       'Automatically detect and update to pre-release (dev) builds.';
+
+  @override
+  String get unstableUpdates => 'Unstable Builds';
+
+  @override
+  String get unstableUpdatesDesc =>
+      'Also allow automatic updates for experimental (unstable) builds.';
 
   @override
   String get dailyMissions => 'Daily Missions';

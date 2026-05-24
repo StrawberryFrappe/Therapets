@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+- **Architectural & Code Audit Remediation**:
+  - **Native Mission System**: Created `MissionManager.kt` to evaluate missions based on JSON configuration directly from Native Android to ensure survival during Flutter Engine suspension.
+  - **Offline Cloud Logs**: Configurable offline cloud logging inside `BleForegroundService.kt` to ensure disconnected time logs continuously if `enable_disconnected_cloud_logs` is enabled.
+  - **Corrupted Packet Filter**: Implemented heuristic filters based on impossible IMU magnitude (>10g) and physiological bounds (|delta| > 20,000 for IR data) across Native Kotlin and Flutter Dart layers.
+
 ## [1.0.0] - 2026-01-12
 
 ### Added
