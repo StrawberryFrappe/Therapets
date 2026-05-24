@@ -54,9 +54,6 @@ class TelemetryData {
       if (bytes.length == 16) {
         rawIr = byteData.getUint16(12, Endian.little);
         rawRed = byteData.getUint16(14, Endian.little);
-        
-        // Corrupted packet filter
-        if (rawIr == 65535 || rawRed == 65535) return null;
       } else if (bytes.length == 14) {
         rawTemp = byteData.getUint16(12, Endian.little);
       }

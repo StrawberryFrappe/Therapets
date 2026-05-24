@@ -285,8 +285,8 @@ class DeviceService {
     }
     
     if (_bluetooth.isNativeHumanDetected) {
-      _cachedNativeBpm = _bluetooth.currentNativeBpm ?? 0;
-      _cachedNativeSpo2 = _bluetooth.currentNativeSpo2 ?? 0;
+      _cachedNativeBpm = _bluetooth.nativeBpm;
+      _cachedNativeSpo2 = _bluetooth.nativeSpo2;
       if (_cachedNativeBpm > 0 && _deviceType == DeviceType.unknown) {
         _deviceType = DeviceType.max30100;
       }
