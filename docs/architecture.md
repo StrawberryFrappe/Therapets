@@ -40,15 +40,16 @@ classDiagram
         +flushQueue()
     }
     
-    class TelemetryTracker {
-        -_onMinuteBoundary()
+    class MissionManager {
+        <<Native / Kotlin>>
+        +evaluateMissions()
     }
 
     %% Service Relationships
     DeviceService --> BluetoothService : consumes raw streams
     DeviceService --> BioSignalProcessor : decodes payloads
-    TelemetryTracker --> DeviceService : observes events
-    TelemetryTracker --> CloudService : reports to
+    BleForegroundService --> MissionManager : invokes every minute
+    MissionManager --> CloudService : uses for HTTP logging
 
     %% Game Layer
     class VirtualPetGame {
