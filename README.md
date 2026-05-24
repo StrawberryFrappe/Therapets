@@ -60,13 +60,7 @@ classDiagram
         +flushQueue()
     }
 
-    class TelemetryTracker {
-        +init()
-        -_onMinuteBoundary()
-    }
-
-    TelemetryTracker --> DeviceService : observes
-    TelemetryTracker --> CloudService : reports to
+    %% TelemetryTracker was removed and minute aggregation was shifted to native (BleForegroundService + CloudManager + MissionManager).
 
     %% Game Layer
     class FlameGame
@@ -132,7 +126,6 @@ classDiagram
 | `BluetoothService` | Low-level BLE manager (scan, connect, foreground service) | `incomingRaw$` (bytes) |
 | `DeviceService` | High-level abstraction (parses bytes, detects gestures) | `telemetry$` (sensor data), `events$` (ShakeEvent, etc.) |
 | `CloudService` | Cloud connectivity & event queueing (ThingsBoard) | HTTP Telemetry |
-| `TelemetryTracker` | Aggregates data & tracks sessions | `sync_status`, `mission_completed` events |
 
 ### Game Layer (Flame Engine)
 | Component | Description |
