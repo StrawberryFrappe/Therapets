@@ -176,9 +176,10 @@ class DeviceService {
 
   int _cachedNativeBpm = 0;
   int _cachedNativeSpo2 = 0;
+  bool _cachedNativeHumanDetected = false;
 
   void _tryPreSeed() {
-    if (_cachedNativeBpm > 0 && _cachedNativeSpo2 > 0) {
+    if (_cachedNativeHumanDetected && _cachedNativeBpm > 0 && _cachedNativeSpo2 > 0) {
       _bioProcessor.preSeed(_cachedNativeBpm, _cachedNativeSpo2);
     }
   }
@@ -189,6 +190,11 @@ class DeviceService {
     // 1. Attach listeners BEFORE initializing BluetoothService to capture initial state emissions
     
     // Listen to native vitals to pre-seed bio processor
+    _nativeHumanSub = _bluetooth.nativeHumanDetected$.listen((detected) {
+      _cachedNativeHumanDetected = detected;
+      _tryPreSeed();
+    });
+
     _nativeBpmSub = _bluetooth.nativeBpm$.listen((bpm) {
       if (bpm > 0) {
         if (_deviceType == DeviceType.unknown) _deviceType = DeviceType.max30100;
@@ -285,6 +291,7 @@ class DeviceService {
     }
     
     if (_bluetooth.isNativeHumanDetected) {
+      _cachedNativeHumanDetected = true;
       _cachedNativeBpm = _bluetooth.nativeBpm;
       _cachedNativeSpo2 = _bluetooth.nativeSpo2;
       if (_cachedNativeBpm > 0 && _deviceType == DeviceType.unknown) {

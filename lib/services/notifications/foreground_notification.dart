@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter/services.dart';
@@ -95,7 +96,8 @@ class ForegroundNotificationUpdater {
     final prefs = await SharedPreferences.getInstance();
     final showData = prefs.getBool('notif_show_data') ?? false;
     final savedLocale = prefs.getString('app_locale');
-    final isSpanish = savedLocale == 'es';
+    final effectiveLocale = savedLocale ?? PlatformDispatcher.instance.locale.languageCode;
+    final isSpanish = effectiveLocale == 'es';
     final text = showData ? (_pending ?? '') : (isSpanish ? 'Tu dispositivo está sincronizado' : 'Your device is synced');
     _pending = null;
     _lastSent = text;

@@ -816,7 +816,7 @@ class BioSignalProcessor(private val context: Context) {
         val displayBpm = if (fingerDetectedState && bpm > 0) bpm else (if (fingerDetectedState) lastValidBpm else 0)
         val displaySpO2 = if (fingerDetectedState && currentSpO2 >= minSpo2ForHuman) currentSpO2 else (if (fingerDetectedState) lastValidSpO2 else 0)
         
-        val hasValidVitals = displayBpm in minBpmForHuman..maxBpmForHuman && displaySpO2 >= minSpo2ForHuman
+        val hasValidVitals = bpm in minBpmForHuman..maxBpmForHuman && currentSpO2 >= minSpo2ForHuman
         val fingerSustained = consecutiveValidSamples > 15
         val bpmStdDev = calculateBpmStdDev()
         val isBpmStable = bpmHistory.size < 3 || bpmStdDev < 40.0

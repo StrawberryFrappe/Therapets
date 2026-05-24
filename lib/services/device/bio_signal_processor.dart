@@ -403,9 +403,9 @@ class BioSignalProcessor {
     // SIMPLIFIED Human Detection (Phase 1: Basic)
     // Start with minimal requirements, add more checks if false positives occur
     // This breaks the circular dependency on needing history before detecting
-    final hasValidVitals = displayBpm >= _minBpmForHuman && 
-                           displayBpm <= _maxBpmForHuman &&
-                           displaySpO2 >= _minSpo2ForHuman;
+    final hasValidVitals = bpm >= _minBpmForHuman && 
+                           bpm <= _maxBpmForHuman &&
+                           validSpO2 >= _minSpo2ForHuman;
     
     // Sustained finger presence check (0.5 second)
     final fingerSustained = _consecutiveValidSamples > 50;
@@ -446,7 +446,7 @@ class BioSignalProcessor {
     );
     
     // Store as last valid reading if human is detected or if we have valid vitals
-    if (humanDetected || (displayBpm > 0 && displaySpO2 > 0)) {
+    if (humanDetected || (bpm > 0 && validSpO2 > 0)) {
       _lastValidBioData = _latestBioData;
       _lastValidBioDataTimestamp = DateTime.now();
     }

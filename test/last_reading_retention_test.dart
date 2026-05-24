@@ -16,7 +16,7 @@ void main() {
       final lastReading = processor.lastValidBioData;
       expect(lastReading, isNotNull);
       expect(lastReading!.bpm, 75);
-      expect(lastReading!.spo2, 98);
+      expect(lastReading.spo2, 98);
       expect(processor.lastValidBioDataTimestamp, isNotNull);
       
       processor.dispose();
