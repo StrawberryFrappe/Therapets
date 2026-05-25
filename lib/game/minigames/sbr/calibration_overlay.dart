@@ -60,7 +60,10 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
           _calibrator.confirmLeft(_latestRollAngle);
           break;
         case CalibrationState.calibratingRight:
-          _calibrator.confirmRight(_latestRollAngle);
+          if (!_calibrator.confirmRight(_latestRollAngle)) {
+            // Calibration rejected due to narrow range, UI restarts naturally
+            break;
+          }
           _finishCalibration();
           break;
         default:

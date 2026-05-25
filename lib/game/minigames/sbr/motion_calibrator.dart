@@ -15,7 +15,7 @@ enum CalibrationState {
 ///
 /// Usage:
 ///   1. Call [startLeftPhase] to begin collecting left samples.
-///   2. Feed each [TelemetryData] packet via [addSample] (actually [rollFromTelemetry]).
+///   2. Feed each [TelemetryData] packet via [rollFromTelemetry].
 ///   3. Call [confirmLeft] then [confirmRight] to lock in bounds.
 ///   4. Use [mapAngleToScreenX] to convert live roll angles to bumper X.
 class MotionCalibrator {
@@ -51,15 +51,18 @@ class MotionCalibrator {
     state = CalibrationState.calibratingRight;
   }
 
-  void confirmRight(double roll) {
+  bool confirmRight(double roll) {
     rightAngle = roll;
 
-    // Prevent division by zero if angles are identical
-    if ((rightAngle - leftAngle).abs() < 1.0) {
-      rightAngle = leftAngle + 1.0;
+    // Ensure adequate separation between left and right calibration points
+    if ((rightAngle - leftAngle).abs() < 5.0) {
+      // Range too small, reject calibration and prompt restart
+      state = CalibrationState.calibratingLeft;
+      return false;
     }
 
     state = CalibrationState.done;
+    return true;
   }
 
   // --- Mapping ---

@@ -56,7 +56,6 @@ class Ball extends PositionComponent with CollisionCallbacks {
     // Launch upwards with slightly random angle
     final angle = -pi / 2 + (Random().nextDouble() - 0.5) * 0.5; // -90 deg +/- 15 deg
     velocity = Vector2(cos(angle), sin(angle)) * speed;
-    // Forward boost removed to prevent gradual speed increase
   }
 
   void split(int count) {
@@ -98,12 +97,18 @@ class Ball extends PositionComponent with CollisionCallbacks {
       }
     }
 
+    // Calculate effective velocity with upward boost if needed
+    Vector2 effectiveVelocity = velocity.clone();
+    if (effectiveVelocity.y < 0) {
+      effectiveVelocity.y *= GameSettings.sbrUpwardSpeedMultiplier;
+    }
+
     // Move ball
-    position += velocity * dt;
+    position += effectiveVelocity * dt;
 
     // Spin sprite 
     if (spriteComponent is PositionComponent) {
-      (spriteComponent as PositionComponent).angle += (velocity.length * dt) * 0.01;
+      (spriteComponent as PositionComponent).angle += (effectiveVelocity.length * dt) * 0.01;
     }
 
     // Screen bounds bounce
@@ -158,9 +163,8 @@ class Ball extends PositionComponent with CollisionCallbacks {
     final bounceAngle = hitFactor * maxAngle;
     
     // Velocity always points UP (-y) after hitting bumper
-    final speed = velocity.length;
-    velocity = Vector2(sin(bounceAngle), -cos(bounceAngle)) * speed;
-    // Forward boost removed to prevent gradual speed increase
+    final currentSpeed = velocity.length;
+    velocity = Vector2(sin(bounceAngle), -cos(bounceAngle)) * currentSpeed;
     
     // Reset combo
     game.resetCombo();
@@ -202,7 +206,7 @@ class Ball extends PositionComponent with CollisionCallbacks {
     } else {
       // Hit top or bottom
       final newY = dy > 0 ? velocity.y.abs() : -velocity.y.abs();
-      velocity.y = newY; // Forward boost removed
+      velocity.y = newY;
     }
   }
 
