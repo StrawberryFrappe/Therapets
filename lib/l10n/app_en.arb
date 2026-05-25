@@ -134,9 +134,21 @@
 
   "difficultyLabel": "Difficulty",
   "difficultyEasy": "1",
+  "@difficultyEasy": {
+    "description": "Difficulty level label shown as a number; 1 = easiest, 4 = hardest."
+  },
   "difficultyMedium": "2",
+  "@difficultyMedium": {
+    "description": "Difficulty level label shown as a number; 1 = easiest, 4 = hardest."
+  },
   "difficultyHard": "3",
+  "@difficultyHard": {
+    "description": "Difficulty level label shown as a number; 1 = easiest, 4 = hardest."
+  },
   "difficultyExtreme": "4",
+  "@difficultyExtreme": {
+    "description": "Difficulty level label shown as a number; 1 = easiest, 4 = hardest."
+  },
 
   "scanForDevicesTitle": "Scan for Devices",
   "disconnectForget": "Disconnect & Forget",
