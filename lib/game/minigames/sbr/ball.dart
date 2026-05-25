@@ -5,7 +5,6 @@ import 'package:flame/components.dart';
 import '../../pets/pet_stats.dart';
 import '../../game_settings.dart';
 import '../flappy_bird/flappy_pet.dart' as flappy_pet; // Reusing sprite logic
-import '../flappy_bird/flappy_food.dart' as flappy_food; // Reusing sprite logic
 
 import 'sbr_game.dart';
 import 'bumper.dart';
@@ -44,16 +43,10 @@ class Ball extends PositionComponent with CollisionCallbacks {
   Future<void> onLoad() async {
     await super.onLoad();
     
-    // Add sprite based on connection
-    if (isPetSprite) {
-      spriteComponent = flappy_pet.FlappyPet(petStats: petStats)
-        ..size = Vector2(radius * 3, radius * 3)
-        ..anchor = Anchor.center;
-    } else {
-      spriteComponent = flappy_food.FlappyFood()
-        ..size = Vector2(radius * 2, radius * 2)
-        ..anchor = Anchor.center;
-    }
+    // Always use Bob's model
+    spriteComponent = flappy_pet.FlappyPet(petStats: petStats)
+      ..size = Vector2(radius * 3, radius * 3)
+      ..anchor = Anchor.center;
     
     add(spriteComponent);
     add(CircleHitbox(radius: radius));
