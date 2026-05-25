@@ -19,7 +19,7 @@ Therapets includes several minigames to help you bond with your pet:
 
 ### Flappy Pet
 A classic side-scrolling obstacle game. Guide your pet through the gaps!
-- **Difficulties**: 1 (Easy) to 4 (Extreme).
+- **Difficulties**: 1 to 4.
 - Earning high scores grants bonus rewards.
 
 ### Sensor Calibration
