@@ -1,14 +1,16 @@
 # Therapets Factory State
 
 ## 1. Project State
-- **Status:** Development - Stage 5 Complete (Multilingual Support)
-- **Current Objective:** Stabilize background telemetry execution and enhance `architecture.md`.
-- **Last Sync:** 2026-05-24
+- **Status:** Delivered - Stage 6 Complete (Custom Multilingual Documentation & Agents)
+- **Current Objective:** Concluded the documentation overhaul and agent scaffolding. Next cycle will focus on actual screenshot insertion by user and active telemetry validation.
+- **Last Sync:** 2026-05-25
 
 ## 2. Full Backlog
 - [x] Migrate Cloud pushes (Thingsboard HTTP) and Mission tallies to Native to survive Flutter Engine suspension.
 - [x] Audit `BleForegroundService` stability and 15-second grace window logic.
 - [x] Implement robust error handling for `bio_signal_processor.dart` when receiving corrupted BLE packets.
+- [x] Create dedicated agents for technical documentation and github pages optimization.
+- [x] Redesign Jekyll-based usage manual with a premium multilingual glassmorphism/pastel design, comprehensive guides, and Mermaid.js diagrams.
 
 ## 3. History Log
 
@@ -21,3 +23,4 @@
 - **[2026-05-24]**: Updated SBR minigame calibration flow: Reduced from 3 to 2 steps (Left/Right), mapped bumper edges perfectly to screen edges using linear interpolation, forced Bob's sprite as the ball regardless of connection state, and added visual UI assets for calibration poses.
 - **[2026-05-24]**: Scaffolded Jekyll-based GitHub Pages usage manual in `/docs`, configured with Cayman theme, custom navigation header layout, and markdown pages for Welcome, BLE Setup, Daily Missions, and Pet Care.
 - **[2026-05-24]**: Fixed SBR minigame mechanics by stopping the upward speed multiplier from compounding into bounce velocity, which was causing the ball to continuously gain speed. Swapped the flipped left/right instruction images in the calibration overlay.
+- **[2026-05-25]**: Created `technical_writer` and `github_pages_specialist` agents, added them to `AGENTS.md`. Designed and implemented a beautiful glassmorphism-pastel jekyll layout from scratch. Translated and rewrote all manual pages in both Spanish and English, including detailed step-by-step guides for BLE sync state, daily missions grace windows, updates, telemetry calibration, and architecture diagrams rendered via dynamic Mermaid.js.

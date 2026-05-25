@@ -1,3 +1,10 @@
-theme: jekyll-theme-cayman
-title: Therapets
-description: First Usage Manual for the Therapets Platform
+theme: null
+title: Therapets Manual
+description: Documentación oficial y visión del sistema Therapets.
+# Variables para la navegación global
+defaults:
+  -
+    scope:
+      path: ""
+    values:
+      layout: "default"
