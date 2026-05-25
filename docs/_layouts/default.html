@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="{{ site.lang | default: "en-US" }}">
+  <head>
+    <meta charset="UTF-8">
+    <title>{{ page.title | default: site.title }} | {{ site.title }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#157878">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
+    <style>
+      .nav-header {
+        text-align: center;
+        margin-top: 2rem;
+      }
+      .nav-header .btn {
+        margin: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="page-header" role="banner">
+      <h1 class="project-name">{{ site.title | default: site.github.repository_name }}</h1>
+      <h2 class="project-tagline">{{ site.description | default: site.github.project_tagline }}</h2>
+      
+      <div class="nav-header">
+        <a href="{{ '/' | relative_url }}" class="btn">Home</a>
+        <a href="{{ '/connecting_device.html' | relative_url }}" class="btn">BLE Setup</a>
+        <a href="{{ '/daily_missions.html' | relative_url }}" class="btn">Missions</a>
+        <a href="{{ '/pet_care.html' | relative_url }}" class="btn">Pet Care</a>
+      </div>
+    </header>
+
+    <main id="content" class="main-content" role="main">
+      {{ content }}
+    </main>
+  </body>
+</html>
