@@ -53,6 +53,8 @@ This project uses the Antigravity Modular Factory Workflow. The active agents fo
 1. **Lead Flutter Engineer** (`agents/lead_flutter_engineer.md`): Focuses on Flutter architecture, state management, and UI.
 2. **BLE/IoT Specialist** (`agents/ble_iot_specialist.md`): Focuses on device communication, foreground services, and telemetry processing.
 3. **Game Developer** (`agents/game_developer.md`): Focuses on the Flame engine, pet lifecycle, and minigames.
+4. **Technical Writer** (`agents/technical_writer.md`): Focuses on the elaboration of technical documentation, user manuals, and maintaining clarity in written materials.
+5. **GitHub Pages Specialist** (`agents/github_pages_specialist.md`): Focuses on deploying, formatting, and optimizing the GitHub Pages documentation site.
 
 ### ⚠️ STRICT AGENT MANDATE: DOCUMENTATION & LOGGING
 
