@@ -1,7 +1,7 @@
 name: Therapets
 description: Virtual pet therapy app for orthotic devices.
 publish_to: 'none'
-version: 1.0.4+29
+version: 1.0.5+58
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
