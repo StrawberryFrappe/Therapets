@@ -89,11 +89,11 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
   String _getImageAsset() {
     switch (_calibrator.state) {
       case CalibrationState.calibratingLeft:
-        return 'assets/images/armfacingdown.png';
-      case CalibrationState.calibratingRight:
         return 'assets/images/armfacingup.png';
-      default:
+      case CalibrationState.calibratingRight:
         return 'assets/images/armfacingdown.png';
+      default:
+        return 'assets/images/armfacingup.png';
     }
   }
 

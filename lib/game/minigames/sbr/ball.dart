@@ -56,10 +56,7 @@ class Ball extends PositionComponent with CollisionCallbacks {
     // Launch upwards with slightly random angle
     final angle = -pi / 2 + (Random().nextDouble() - 0.5) * 0.5; // -90 deg +/- 15 deg
     velocity = Vector2(cos(angle), sin(angle)) * speed;
-    // Make upward component faster using runtime setting
-    if (velocity.y < 0) {
-      velocity.y *= GameSettings.sbrUpwardSpeedMultiplier;
-    }
+    // Forward boost removed to prevent gradual speed increase
   }
 
   void split(int count) {
@@ -163,10 +160,7 @@ class Ball extends PositionComponent with CollisionCallbacks {
     // Velocity always points UP (-y) after hitting bumper
     final speed = velocity.length;
     velocity = Vector2(sin(bounceAngle), -cos(bounceAngle)) * speed;
-    // Make upward component faster after bumper bounce (uses GameSettings)
-    if (velocity.y < 0) {
-      velocity.y *= GameSettings.sbrUpwardSpeedMultiplier;
-    }
+    // Forward boost removed to prevent gradual speed increase
     
     // Reset combo
     game.resetCombo();
@@ -208,7 +202,7 @@ class Ball extends PositionComponent with CollisionCallbacks {
     } else {
       // Hit top or bottom
       final newY = dy > 0 ? velocity.y.abs() : -velocity.y.abs();
-      velocity.y = newY < 0 ? newY * GameSettings.sbrUpwardSpeedMultiplier : newY;
+      velocity.y = newY; // Forward boost removed
     }
   }
 
