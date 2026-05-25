@@ -725,25 +725,25 @@ abstract class AppLocalizations {
   /// No description provided for @difficultyEasy.
   ///
   /// In en, this message translates to:
-  /// **'Easy'**
+  /// **'1'**
   String get difficultyEasy;
 
   /// No description provided for @difficultyMedium.
   ///
   /// In en, this message translates to:
-  /// **'Medium'**
+  /// **'2'**
   String get difficultyMedium;
 
   /// No description provided for @difficultyHard.
   ///
   /// In en, this message translates to:
-  /// **'Hard'**
+  /// **'3'**
   String get difficultyHard;
 
   /// No description provided for @difficultyExtreme.
   ///
   /// In en, this message translates to:
-  /// **'Extreme'**
+  /// **'4'**
   String get difficultyExtreme;
 
   /// No description provided for @scanForDevicesTitle.

@@ -11,9 +11,8 @@ import 'motion_calibrator.dart';
 /// connected) to calibrate the user's wrist tilt range.
 ///
 /// Tap-to-confirm calibration logic:
-/// Phase 1 – Center: user holds wrist in a comfortable neutral pose and taps.
-/// Phase 2 – Left: user tilts wrist max left and taps.
-/// Phase 3 – Right: user tilts wrist max right and taps.
+/// Phase 1 – Left: user tilts wrist max left and taps.
+/// Phase 2 – Right: user tilts wrist max right and taps.
 ///
 /// The 3-D Donut is rendered behind the instructions so the user gets
 /// immediate visual feedback that their movement is being tracked.
@@ -41,7 +40,7 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
   void initState() {
     super.initState();
     _telemetrySub = widget.deviceService.telemetry$.listen(_onTelemetry);
-    _calibrator.startCenterPhase();
+    _calibrator.startLeftPhase();
   }
 
   @override
@@ -57,14 +56,14 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
   void _handleTap() {
     setState(() {
       switch (_calibrator.state) {
-        case CalibrationState.calibratingCenter:
-          _calibrator.confirmCenter(_latestRollAngle);
-          break;
         case CalibrationState.calibratingLeft:
           _calibrator.confirmLeft(_latestRollAngle);
           break;
         case CalibrationState.calibratingRight:
-          _calibrator.confirmRight(_latestRollAngle);
+          if (!_calibrator.confirmRight(_latestRollAngle)) {
+            // Calibration rejected due to narrow range, UI restarts naturally
+            break;
+          }
           _finishCalibration();
           break;
         default:
@@ -81,14 +80,23 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
   String _getInstruction(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
     switch (_calibrator.state) {
-      case CalibrationState.calibratingCenter:
-        return loc.sbrCalibrationCenter;
       case CalibrationState.calibratingLeft:
         return loc.sbrCalibrationLeft;
       case CalibrationState.calibratingRight:
         return loc.sbrCalibrationRight;
       default:
         return '';
+    }
+  }
+
+  String _getImageAsset() {
+    switch (_calibrator.state) {
+      case CalibrationState.calibratingLeft:
+        return 'assets/images/armfacingup.png';
+      case CalibrationState.calibratingRight:
+        return 'assets/images/armfacingdown.png';
+      default:
+        return 'assets/images/armfacingup.png';
     }
   }
 
@@ -109,21 +117,38 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
             child: Container(color: Colors.black.withValues(alpha: 0.45)),
           ),
 
-          // Instructions
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Text(
-                _getInstruction(context),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(offset: Offset(2, 2), blurRadius: 6, color: Colors.black87),
-                  ],
+          // Image from bottom
+          Positioned(
+            bottom: -50,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: 0.8,
+                child: Image.asset(
+                  _getImageAsset(),
+                  fit: BoxFit.contain,
+                  height: MediaQuery.of(context).size.height * 0.5,
                 ),
+              ),
+            ),
+          ),
+
+          // Instructions at top
+          Positioned(
+            top: 60,
+            left: 24,
+            right: 24,
+            child: Text(
+              _getInstruction(context),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                shadows: [
+                  Shadow(offset: Offset(2, 2), blurRadius: 6, color: Colors.black87),
+                ],
               ),
             ),
           ),

@@ -121,10 +121,22 @@
   "addSilver": "+100 PLATA",
 
   "difficultyLabel": "Dificultad",
-  "difficultyEasy": "Fácil",
-  "difficultyMedium": "Medio",
-  "difficultyHard": "Difícil",
-  "difficultyExtreme": "Extremo",
+  "difficultyEasy": "1",
+  "@difficultyEasy": {
+    "description": "Etiqueta numérica de dificultad. 1 = la más fácil."
+  },
+  "difficultyMedium": "2",
+  "@difficultyMedium": {
+    "description": "Etiqueta numérica de dificultad. 2 = más difícil que 1 y más fácil que 3."
+  },
+  "difficultyHard": "3",
+  "@difficultyHard": {
+    "description": "Etiqueta numérica de dificultad. 3 = más difícil que 2 y más fácil que 4."
+  },
+  "difficultyExtreme": "4",
+  "@difficultyExtreme": {
+    "description": "Etiqueta numérica de dificultad. 4 = la más difícil."
+  },
 
   "scanForDevicesTitle": "Buscar Dispositivos",
   "disconnectForget": "Desconectar y Olvidar",
