@@ -2,48 +2,36 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hive/hive.dart';
-
-part 'pet_stats.g.dart';
 
 /// Manages the hunger and happiness stats for a pet.
 /// Stats trickle over time based on configurable rates.
 /// Supports persistence for background stat updates.
-@HiveType(typeId: 1)
-class PetStats extends HiveObject {
+class PetStats {
   /// Hunger level: 0.0 (starving) to 1.0 (full)
-  @HiveField(0)
   double _hunger;
   
   /// Happiness level: 0.0 (miserable) to 1.0 (ecstatic)
-  @HiveField(1)
   double _happiness;
   
   /// Happiness buffer accumulated while app was in background and linked
-  @HiveField(2)
   double _happinessBuffer;
 
   /// Rate at which hunger decreases per second (always active)
-  @HiveField(3)
   double hungerDecayRate;
   
   /// Rate at which happiness increases per second (when device is synced)
-  @HiveField(4)
   double happinessGainRate;
   
   /// Rate at which happiness decreases per second (when device is NOT synced)
-  @HiveField(5)
   double happinessDecayRate;
   
   /// Timestamp of last update (for background calculations)
-  @HiveField(6)
   DateTime _lastUpdateTime;
   
   /// Callback triggered when wellbeing drops below threshold
   void Function()? onLowWellbeing;
   
   /// Threshold for low wellbeing notification (0.0 to 1.0)
-  @HiveField(7)
   double lowWellbeingThreshold;
   
   /// Whether low wellbeing notification was already sent (resets when recovered)
@@ -62,19 +50,15 @@ class PetStats extends HiveObject {
   bool get isLoading => _isLoading;
 
   /// Gold coins (for clothing)
-  @HiveField(8)
   int _goldCoins = 0;
   
   /// Silver coins (for food)
-  @HiveField(9)
   int _silverCoins = 0;
 
   /// IDs of unlocked clothing items
-  @HiveField(10)
   List<String> _unlockedClothingIds = [];
 
   /// Map of slot name to clothing ID for equipped items
-  @HiveField(11)
   Map<String, String> _equippedClothing = {};
 
   PetStats({
@@ -296,7 +280,6 @@ class PetStats extends HiveObject {
   // ============ INVENTORY METHODS ============
 
   /// Map of food item ID to quantity owned
-  @HiveField(12)
   Map<String, int> _foodInventory = {};
 
   /// Get current food inventory
@@ -341,8 +324,8 @@ class PetStats extends HiveObject {
     _hunger = (json['hunger'] as num?)?.toDouble() ?? _hunger;
     _happiness = (json['happiness'] as num?)?.toDouble() ?? _happiness;
     _happinessBuffer = (json['happinessBuffer'] as num?)?.toDouble() ?? 0.0;
-    _goldCoins = (json['goldCoins'] as int?) ?? 0;
-    _silverCoins = (json['silverCoins'] as int?) ?? 0;
+    _goldCoins = (json['goldCoins'] as num?)?.toInt() ?? _goldCoins;
+    _silverCoins = (json['silverCoins'] as num?)?.toInt() ?? _silverCoins;
     _unlockedClothingIds =
         List<String>.from(json['unlockedClothing'] as List? ?? []);
     _equippedClothing =
@@ -422,28 +405,18 @@ class PetStats extends HiveObject {
     final now = DateTime.now();
     _lastUpdateTime = now;
     
-    debugPrint('[PetStats] SAVE START (Hive)');
+    debugPrint('[PetStats] SAVE START (SharedPreferences)');
     
     try {
-      if (isInBox) {
-        await super.save();
-        debugPrint('[PetStats] SAVE SUCCESS (Hive) - Timestamp: $now');
-        
-        // Task 1: Mirror to SharedPreferences for native background service
-        await _mirrorToPrefs();
-      } else {
-        debugPrint('[PetStats] SAVE FAILED - Not in a Hive box!');
-        // Even if not in box (e.g. initial setup), we might want to mirror
-        await _mirrorToPrefs();
-      }
+      await _saveToPrefs();
+      debugPrint('[PetStats] SAVE SUCCESS - Timestamp: $now');
     } catch (e) {
       debugPrint('[PetStats] SAVE ERROR: $e');
     }
   }
 
-  /// Mirror critical stats to SharedPreferences for the native background service.
-  /// This ensures the service has access to the latest Hive data.
-  Future<void> _mirrorToPrefs() async {
+  /// Write state to SharedPreferences as an atomic bundle.
+  Future<void> _saveToPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
@@ -493,8 +466,8 @@ class PetStats extends HiveObject {
     _hunger = (json['hunger'] as num?)?.toDouble() ?? _hunger;
     _happiness = (json['happiness'] as num?)?.toDouble() ?? _happiness;
     _happinessBuffer = (json['happinessBuffer'] as num?)?.toDouble() ?? _happinessBuffer;
-    _goldCoins = (json['goldCoins'] as int?) ?? _goldCoins;
-    _silverCoins = (json['silverCoins'] as int?) ?? _silverCoins;
+    _goldCoins = (json['goldCoins'] as num?)?.toInt() ?? _goldCoins;
+    _silverCoins = (json['silverCoins'] as num?)?.toInt() ?? _silverCoins;
     
     final lastMs = json['lastUpdateMs'] as int?;
     if (lastMs != null) {

@@ -1,47 +1,66 @@
-import 'package:hive/hive.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'cloud_event.dart';
 
-/// Persistent queue for cloud events using Hive.
+/// Persistent queue for cloud events using SharedPreferences.
 class EventQueue {
-  static const String _boxName = 'eventQueue';
-  Box<CloudEvent>? _box;
+  static const String _prefKey = 'cloud_event_queue';
+  List<CloudEvent> _events = [];
 
-  /// Initialize the queue (must be called after Hive.init)
+  /// Initialize the queue
   Future<void> init() async {
-    if (!Hive.isAdapterRegistered(0)) {
-      Hive.registerAdapter(CloudEventAdapter());
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_prefKey);
+    if (jsonStr != null) {
+      try {
+        final List<dynamic> list = jsonDecode(jsonStr);
+        _events = list.map((e) => CloudEvent.fromJson(e as Map<String, dynamic>)).toList();
+      } catch (e) {
+        print('[EventQueue] Error loading events: $e');
+        _events = [];
+      }
     }
-    _box = await Hive.openBox<CloudEvent>(_boxName);
+  }
+
+  Future<void> _save() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = jsonEncode(_events.map((e) => e.toJson()).toList());
+    await prefs.setString(_prefKey, jsonStr);
   }
 
   /// Add an event to the queue
   Future<void> enqueue(CloudEvent event) async {
-    await _box?.add(event);
+    _events.add(event);
+    await _save();
+  }
+  
+  /// Update an event (e.g., retry count)
+  Future<void> update(CloudEvent event) async {
+    // The event is modified in place, so we just need to save the list
+    await _save();
   }
 
   /// Get all pending events (oldest first)
   List<CloudEvent> getAll() {
-    return _box?.values.toList() ?? [];
+    return List.unmodifiable(_events);
   }
 
-  /// Remove an event from the queue by key
-  Future<void> remove(dynamic key) async {
-    await _box?.delete(key);
-  }
-
-  /// Remove multiple events by their keys
-  Future<void> removeAll(Iterable<dynamic> keys) async {
-    await _box?.deleteAll(keys);
+  /// Remove multiple events by their IDs
+  Future<void> removeAll(Iterable<String> ids) async {
+    final idsSet = ids.toSet();
+    _events.removeWhere((e) => idsSet.contains(e.id));
+    await _save();
   }
 
   /// Get the number of pending events
-  int get count => _box?.length ?? 0;
+  int get count => _events.length;
 
   /// Check if queue is empty
-  bool get isEmpty => count == 0;
+  bool get isEmpty => _events.isEmpty;
 
   /// Clear all events (use with caution)
   Future<void> clear() async {
-    await _box?.clear();
+    _events.clear();
+    await _save();
   }
 }
