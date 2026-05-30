@@ -173,6 +173,11 @@ class BleForegroundService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        try {
+            checkPetCare()
+        } catch (e: Exception) {
+            Log.w("BleForegroundService", "onTaskRemoved flush failed: $e")
+        }
         // Schedule a restart via AlarmManager if the user swipes the app away
         try {
             val restartIntent = Intent(this, BleForegroundService::class.java)
@@ -284,104 +289,47 @@ class BleForegroundService : Service() {
         handler.postDelayed(syncStateRunnable!!, 1000)
     }
 
-    /**
-     * Compute pet stat decay using the same formula as Dart's PetStats.update().
-     * Reads current values from SharedPreferences, applies elapsed decay,
-     * writes updated values back, and fires a notification if wellbeing is low.
-     */
-    private fun readPetLastUpdateMillis(p: SharedPreferences): Long? {
-        val value = p.all["pet_last_update"] ?: return null
-        return when (value) {
-            is Long -> value.takeIf { it > 0L }
-            is Int -> value.toLong().takeIf { it > 0L }
-            is Number -> value.toLong().takeIf { it > 0L }
-            else -> null
-        }
-    }
-
     private fun checkPetCare() {
         val p = prefs ?: return
+        val bundleJson = p.getString("pet_stats_bundle", null) ?: return
 
-        val lastUpdateMs = readPetLastUpdateMillis(p)
-            ?: return  // no pet data saved yet
-
-        val now = System.currentTimeMillis()
-        val elapsedSec = (now - lastUpdateMs) / 1000.0
-        
-        if (DATA_LOG) Log.d("BleForegroundService", "checkPetCare: elapsedSec=$elapsedSec")
-        
-        if (elapsedSec <= 0) return
-
-        // Read current stats (Attempt bundle read first for atomic consistency)
-        var hunger = 1.0
-        var happiness = 1.0
-        var hungerDecayRate = 0.0000463
-        var happinessDecayRate = 0.0000463
-        var happinessGainRate = 0.0001389
-        var threshold = 0.25
-
-        val bundleJson = p.getString("pet_stats_bundle", null)
-        if (bundleJson != null) {
-            try {
-                val org_json = org.json.JSONObject(bundleJson)
-                hunger = org_json.optDouble("hunger", 1.0)
-                happiness = org_json.optDouble("happiness", 1.0)
-                hungerDecayRate = org_json.optDouble("hungerDecayRate", 0.0000463)
-                happinessDecayRate = org_json.optDouble("happinessDecayRate", 0.0000463)
-                happinessGainRate = org_json.optDouble("happinessGainRate", 0.0001389)
-                threshold = org_json.optDouble("lowWellbeingThreshold", 0.25)
-            } catch (e: Exception) {
-                Log.w("BleForegroundService", "Bundle parse error, falling back to keys: $e")
-                // Fallback to individual keys already handled by defaults + p.getFloat below
-            }
-        }
-
-        // Always overlay with individual keys if present (legacy support / backup)
-        hunger = p.getFloat("pet_hunger", hunger.toFloat()).toDouble()
-        happiness = p.getFloat("pet_happiness", happiness.toFloat()).toDouble()
-        hungerDecayRate = p.getFloat("pet_hunger_decay_rate", hungerDecayRate.toFloat()).toDouble()
-        happinessDecayRate = p.getFloat("pet_happiness_decay_rate", happinessDecayRate.toFloat()).toDouble()
-        happinessGainRate = p.getFloat("pet_happiness_gain_rate", happinessGainRate.toFloat()).toDouble()
-        threshold = p.getFloat("pet_low_wellbeing_threshold", threshold.toFloat()).toDouble()
-
-        // Determine if currently synced (native BLE connected AND human detected)
-        val isSynced = p.getBoolean(PREF_CONNECTED, false) && bioProcessor.humanDetected
-
-        // Apply decay (same logic as PetStats.update)
-        hunger = max(0.0, hunger - hungerDecayRate * elapsedSec)
-        if (isSynced && hunger >= 0.25) {
-            happiness = (happiness + happinessGainRate * elapsedSec).coerceAtMost(1.0)
-        } else {
-            happiness = max(0.0, happiness - happinessDecayRate * elapsedSec)
-        }
-
-        // Write updated values back
         try {
-            val editor = p.edit()
-                .putFloat("pet_hunger", hunger.toFloat())
-                .putFloat("pet_happiness", happiness.toFloat())
-                .putLong("pet_last_update", now)
-            
-            // Also update bundle if it existed to maintain atomic integrity
-            if (bundleJson != null) {
-                try {
-                    val org_json = org.json.JSONObject(bundleJson)
-                    org_json.put("hunger", hunger)
-                    org_json.put("happiness", happiness)
-                    org_json.put("lastUpdateMs", now)
-                    editor.putString("pet_stats_bundle", org_json.toString())
-                } catch (e: Exception) {}
-            }
-            
-            editor.apply()
-        } catch (e: Exception) {
-            Log.w("BleForegroundService", "failed to write pet stats: $e")
-        }
+            val org_json = org.json.JSONObject(bundleJson)
+            val lastUpdateMs = org_json.optLong("lastUpdateMs", 0L)
+            if (lastUpdateMs <= 0L) return
 
-        // Check wellbeing
-        val wellbeing = (hunger + happiness) / 2.0
-        if (wellbeing <= threshold) {
-            firePetAlertIfCooldownPassed(p, now)
+            val now = System.currentTimeMillis()
+            val elapsedSec = (now - lastUpdateMs) / 1000.0
+            if (elapsedSec <= 0) return
+
+            var hunger = org_json.optDouble("hunger", 1.0)
+            var happiness = org_json.optDouble("happiness", 1.0)
+            val hungerDecayRate = org_json.optDouble("hungerDecayRate", 0.0000463)
+            val happinessDecayRate = org_json.optDouble("happinessDecayRate", 0.0000463)
+            val happinessGainRate = org_json.optDouble("happinessGainRate", 0.0001389)
+            val threshold = org_json.optDouble("lowWellbeingThreshold", 0.25)
+
+            val isSynced = p.getBoolean(PREF_CONNECTED, false) && bioProcessor.humanDetected
+
+            hunger = max(0.0, hunger - hungerDecayRate * elapsedSec)
+            if (isSynced && hunger >= 0.25) {
+                happiness = (happiness + happinessGainRate * elapsedSec).coerceAtMost(1.0)
+            } else {
+                happiness = max(0.0, happiness - happinessDecayRate * elapsedSec)
+            }
+
+            org_json.put("hunger", hunger)
+            org_json.put("happiness", happiness)
+            org_json.put("lastUpdateMs", now)
+
+            p.edit().putString("pet_stats_bundle", org_json.toString()).apply()
+
+            val wellbeing = (hunger + happiness) / 2.0
+            if (wellbeing <= threshold) {
+                firePetAlertIfCooldownPassed(p, now)
+            }
+        } catch (e: Exception) {
+            Log.w("BleForegroundService", "checkPetCare error: $e")
         }
     }
 
