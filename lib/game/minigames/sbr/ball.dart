@@ -5,7 +5,6 @@ import 'package:flame/components.dart';
 import '../../pets/pet_stats.dart';
 import '../../game_settings.dart';
 import '../flappy_bird/flappy_pet.dart' as flappy_pet; // Reusing sprite logic
-import '../flappy_bird/flappy_food.dart' as flappy_food; // Reusing sprite logic
 
 import 'sbr_game.dart';
 import 'bumper.dart';
@@ -44,16 +43,10 @@ class Ball extends PositionComponent with CollisionCallbacks {
   Future<void> onLoad() async {
     await super.onLoad();
     
-    // Add sprite based on connection
-    if (isPetSprite) {
-      spriteComponent = flappy_pet.FlappyPet(petStats: petStats)
-        ..size = Vector2(radius * 3, radius * 3)
-        ..anchor = Anchor.center;
-    } else {
-      spriteComponent = flappy_food.FlappyFood()
-        ..size = Vector2(radius * 2, radius * 2)
-        ..anchor = Anchor.center;
-    }
+    // Always use Bob's model
+    spriteComponent = flappy_pet.FlappyPet(petStats: petStats)
+      ..size = Vector2(radius * 3, radius * 3)
+      ..anchor = Anchor.center;
     
     add(spriteComponent);
     add(CircleHitbox(radius: radius));
@@ -63,10 +56,6 @@ class Ball extends PositionComponent with CollisionCallbacks {
     // Launch upwards with slightly random angle
     final angle = -pi / 2 + (Random().nextDouble() - 0.5) * 0.5; // -90 deg +/- 15 deg
     velocity = Vector2(cos(angle), sin(angle)) * speed;
-    // Make upward component faster using runtime setting
-    if (velocity.y < 0) {
-      velocity.y *= GameSettings.sbrUpwardSpeedMultiplier;
-    }
   }
 
   void split(int count) {
@@ -108,12 +97,18 @@ class Ball extends PositionComponent with CollisionCallbacks {
       }
     }
 
+    // Calculate effective velocity with upward boost if needed
+    Vector2 effectiveVelocity = velocity.clone();
+    if (effectiveVelocity.y < 0) {
+      effectiveVelocity.y *= GameSettings.sbrUpwardSpeedMultiplier;
+    }
+
     // Move ball
-    position += velocity * dt;
+    position += effectiveVelocity * dt;
 
     // Spin sprite 
     if (spriteComponent is PositionComponent) {
-      (spriteComponent as PositionComponent).angle += (velocity.length * dt) * 0.01;
+      (spriteComponent as PositionComponent).angle += (effectiveVelocity.length * dt) * 0.01;
     }
 
     // Screen bounds bounce
@@ -168,12 +163,8 @@ class Ball extends PositionComponent with CollisionCallbacks {
     final bounceAngle = hitFactor * maxAngle;
     
     // Velocity always points UP (-y) after hitting bumper
-    final speed = velocity.length;
-    velocity = Vector2(sin(bounceAngle), -cos(bounceAngle)) * speed;
-    // Make upward component faster after bumper bounce (uses GameSettings)
-    if (velocity.y < 0) {
-      velocity.y *= GameSettings.sbrUpwardSpeedMultiplier;
-    }
+    final currentSpeed = velocity.length;
+    velocity = Vector2(sin(bounceAngle), -cos(bounceAngle)) * currentSpeed;
     
     // Reset combo
     game.resetCombo();
@@ -215,7 +206,7 @@ class Ball extends PositionComponent with CollisionCallbacks {
     } else {
       // Hit top or bottom
       final newY = dy > 0 ? velocity.y.abs() : -velocity.y.abs();
-      velocity.y = newY < 0 ? newY * GameSettings.sbrUpwardSpeedMultiplier : newY;
+      velocity.y = newY;
     }
   }
 

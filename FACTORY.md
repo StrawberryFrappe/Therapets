@@ -1,14 +1,17 @@
 # Therapets Factory State
 
 ## 1. Project State
-- **Status:** Development - Stage 5 Complete (Multilingual Support)
-- **Current Objective:** Stabilize background telemetry execution and enhance `architecture.md`.
-- **Last Sync:** 2026-05-24
+- **Status:** Active - Cloud Telemetry Fix
+- **Current Objective:** Fixed native CloudManager reading cloud credentials from wrong SharedPreferences file, causing all telemetry to be silently dropped.
+- **Last Sync:** 2026-06-04
 
 ## 2. Full Backlog
 - [x] Migrate Cloud pushes (Thingsboard HTTP) and Mission tallies to Native to survive Flutter Engine suspension.
 - [x] Audit `BleForegroundService` stability and 15-second grace window logic.
 - [x] Implement robust error handling for `bio_signal_processor.dart` when receiving corrupted BLE packets.
+- [x] Create dedicated agents for technical documentation and github pages optimization.
+- [x] Redesign Jekyll-based usage manual with a premium multilingual glassmorphism/pastel design, comprehensive guides, and Mermaid.js diagrams.
+- [x] Fix native CloudManager SharedPreferences file mismatch preventing cloud telemetry delivery.
 
 ## 3. History Log
 
@@ -18,3 +21,11 @@
 - **[2026-05-24]**: Resolved code review items (DeviceService compilation, BioSignalProcessor recovery threshold on baseline jumps, architecture diagram mapping, deprecated Flutter lifecycle state saving comments, and daily missions base-class method shadowing). Verified build and test compliance. Wrapped up and pushed all fixes to `unstable` branch.
 - **[2026-05-24]**: Fixed additional code review issues: corrected unbounded BLE scanning, filter application, and reconnect backoff in `BleForegroundService.kt`; resolved `LateInitializationError` risk in `MissionService` when Hive `_box` is null; restored robust initialization chain in `AppBootstrapper`. Staged, reviewed, and ready to push.
 - **[2026-05-24]**: Fixed CI failure on `main` branch caused by branch protection rules during version bump. Replaced direct `git push` with `peter-evans/create-pull-request` action in `release.yml` to automatically generate pull requests for version bumps.
+- **[2026-05-24]**: Numbered Flappy Bob difficulty levels from 1 to 4 to prevent young players from feeling discouraged when selecting easier options. Updated English and Spanish `.arb` resources and associated Dart localization wrapper files.
+- **[2026-05-24]**: Updated SBR minigame calibration flow: Reduced from 3 to 2 steps (Left/Right), mapped bumper edges perfectly to screen edges using linear interpolation, forced Bob's sprite as the ball regardless of connection state, and added visual UI assets for calibration poses.
+- **[2026-05-24]**: Scaffolded Jekyll-based GitHub Pages usage manual in `/docs`, configured with Cayman theme, custom navigation header layout, and markdown pages for Welcome, BLE Setup, Daily Missions, and Pet Care.
+- **[2026-05-24]**: Fixed SBR minigame mechanics by stopping the upward speed multiplier from compounding into bounce velocity, which was causing the ball to continuously gain speed. Swapped the flipped left/right instruction images in the calibration overlay.
+- **[2026-05-25]**: Created `technical_writer` and `github_pages_specialist` agents, added them to `AGENTS.md`. Designed and implemented a beautiful glassmorphism-pastel jekyll layout from scratch. Translated and rewrote all manual pages in both Spanish and English, including detailed step-by-step guides for BLE sync state, daily missions grace windows, updates, telemetry calibration, and architecture diagrams rendered via dynamic Mermaid.js.
+- **[2026-05-29]**: Audited and fixed data persistence bugs causing coins/stats to reset. Removed Hive dependencies entirely to eliminate race conditions and dual-store desync. Migrated to a unified SharedPreferences JSON atomic bundle architecture, and added native swipe-to-flush via `BleForegroundService.onTaskRemoved`.
+- **[2026-06-04]**: Fixed native `CloudManager.kt` SharedPreferences file mismatch. Native code was reading `cloud_base_url` and `cloud_device_token` from `getDefaultSharedPreferences()` (wrong file), while Flutter UI writes them to `FlutterSharedPreferences` with `flutter.` key prefix. Added `flutterPrefs` handle to read config from correct file. Queue storage remains in default prefs to avoid cross-contamination.
+

@@ -347,16 +347,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get difficultyLabel => 'Dificultad';
 
   @override
-  String get difficultyEasy => 'Fácil';
+  String get difficultyEasy => '1';
 
   @override
-  String get difficultyMedium => 'Medio';
+  String get difficultyMedium => '2';
 
   @override
-  String get difficultyHard => 'Difícil';
+  String get difficultyHard => '3';
 
   @override
-  String get difficultyExtreme => 'Extremo';
+  String get difficultyExtreme => '4';
 
   @override
   String get scanForDevicesTitle => 'Buscar Dispositivos';

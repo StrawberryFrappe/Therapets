@@ -45,7 +45,6 @@ class GameHud extends StatelessWidget {
         statusText = l10n.statusWaiting;
         break;
       case DeviceDisplayStatus.searching:
-      default:
         statusColor = Colors.red;
         statusText = l10n.statusSearching;
         break;
