@@ -184,21 +184,21 @@ class CloudService {
 
     try {
       final events = _queue.getAll();
-      final keysToRemove = <dynamic>[];
+      final keysToRemove = <String>[];
 
       for (final event in events) {
         final success = await _sendEvent(event);
         if (success) {
-          keysToRemove.add(event.key);
+          keysToRemove.add(event.id);
         } else {
           // Increment retry count
           event.retryCount++;
           if (event.retryCount >= 5) {
             // Drop after 5 failed attempts
-            keysToRemove.add(event.key);
+            keysToRemove.add(event.id);
             print('CloudService: Dropping event ${event.id} after 5 retries');
           } else {
-            await event.save();
+            await _queue.update(event);
           }
           // Stop on first failure to preserve order
           break;

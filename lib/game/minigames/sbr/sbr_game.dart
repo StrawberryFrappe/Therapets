@@ -86,7 +86,7 @@ class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCa
     if (!hasStarted || isGameOver) return;
 
     final roll = MotionCalibrator.rollFromTelemetry(data);
-    final screenX = calibrator!.mapAngleToScreenX(roll, size.x);
+    final screenX = calibrator!.mapAngleToScreenX(roll, size.x, bumper.size.x);
     bumper.setPositionX(screenX);
   }
 
