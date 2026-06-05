@@ -3,7 +3,7 @@
 ## Code Style
 - Use standard Dart and Flutter formatting.
 - State Management: `provider`. Use `context.read`/`context.watch` appropriately to minimize rebuilds.
-- Local Storage: `hive` and `shared_preferences`.
+- Local Storage: `shared_preferences` using atomic JSON bundles. Hive is explicitly FORBIDDEN.
 - Network/BLE: `flutter_blue_plus` for BLE, `dio` or `http` for network.
 
 ## Architecture
@@ -15,9 +15,9 @@
 
 ## Build and Test
 - Dependencies: `flutter pub get`
-- Generate models (Hive): `flutter pub run build_runner build --delete-conflicting-outputs`
 - Run tests: `flutter test`
 - Build Android: `flutter build apk`
+- **MANDATORY TEST POLICY:** You MUST run `flutter test` and ensure all tests pass (especially persistence tests) before committing code or pushing/syncing to the cloud. Do NOT send advances to the cloud if tests are failing.
 
 ## Conventions
 - Game objects (`Pet`, `BobTheBlob`) encapsulate state and behavior (e.g. `PetStats`), updated via `update(dt)`.
@@ -62,3 +62,4 @@ This project uses the Antigravity Modular Factory Workflow. The active agents fo
 1. **Traceability:** You MUST register all your actions, progress, and completed tasks in `FACTORY.md` during each execution cycle.
 2. **Architecture Sync:** You MUST update `docs/architecture.md` (and `README.md` if necessary) whenever making structural changes, introducing new services, or altering the data flow.
 3. **Never bypass the backlog:** Do not implement features that are not tracked in `FACTORY.md`.
+4. **Mandatory Testing:** You MUST run `flutter test` before completing your cycle. If tests fail, your job is NOT done. Fix them before sending advances to the cloud.

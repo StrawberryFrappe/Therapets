@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hive/hive.dart';
 import 'mission.dart';
 import 'daily_missions.dart';
 import '../pets/pet_stats.dart';
@@ -44,12 +43,9 @@ class MissionService {
   // Save lock — serialises concurrent save calls so writes never interleave.
   Future<void> _saveLock = Future.value();
 
-  Box? _box;
-
-  /// Initialize with PetStats reference and Hive box
-  Future<void> init(PetStats stats, Box? box) async {
+  /// Initialize with PetStats reference
+  Future<void> init(PetStats stats) async {
     _petStats = stats;
-    _box = box;
     await _loadMissions();
     await _checkDailyReset();
   }
@@ -132,27 +128,10 @@ class MissionService {
       return;
     }
     
-    debugPrint('[MissionService] LOAD START (Hive)');
+    debugPrint('[MissionService] LOAD START (SharedPreferences)');
     _isLoading = true;
 
     try {
-      if (_box != null && _box!.isNotEmpty) {
-        final lastResetMs = _box!.get('lastResetMs') as int?;
-        if (lastResetMs != null) {
-          _lastResetDate = DateTime.fromMillisecondsSinceEpoch(lastResetMs);
-        }
-        final missions = _box!.get('missions') as List?;
-        if (missions != null && missions.isNotEmpty) {
-          _activeMissions = List<Mission>.from(missions);
-          _isInitialized = true;
-          _canSave = true;
-          _notifyListeners();
-          debugPrint('[MissionService] LOAD SUCCESS (Hive) - ${_activeMissions.length} missions');
-          return;
-        }
-      }
-
-      // Legacy Migration from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final bundleJson = prefs.getString(_bundleKey);
       if (bundleJson != null) {
@@ -170,16 +149,15 @@ class MissionService {
                 .whereType<Mission>()
                 .toList();
             if (_activeMissions.isNotEmpty) {
-              debugPrint('[MissionService] LOAD - Found ${_activeMissions.length} missions in bundle (migrating)');
+              debugPrint('[MissionService] LOAD - Found ${_activeMissions.length} missions in bundle');
               _isInitialized = true;
               _canSave = true; 
               _notifyListeners();
-              await save(); // Save to Hive
               return;
             }
           }
         } catch (e) {
-          debugPrint('[MissionService] Bundle parse error during migration: $e');
+          debugPrint('[MissionService] Bundle parse error: $e');
         }
       }
 
@@ -221,23 +199,11 @@ class MissionService {
   }
 
   Future<void> _doSave() async {
-    if (_box != null) {
-      debugPrint('[MissionService] SAVE START (Hive)');
-      try {
-        await _box!.put('lastResetMs', _lastResetDate.millisecondsSinceEpoch);
-        await _box!.put('missions', _activeMissions);
-        debugPrint('[MissionService] SAVE SUCCESS (Hive)');
-      } catch (e) {
-        debugPrint('[MissionService] SAVE FAILED (Hive): $e');
-      }
-    }
-      
-    // Mirror to SharedPreferences for atomic rehydration on next startup
-    await _mirrorToPrefs();
+    await _saveToPrefs();
   }
 
-  /// Mirror critical mission state to SharedPreferences for atomic rehydration.
-  Future<void> _mirrorToPrefs() async {
+  /// Write mission state to SharedPreferences as an atomic bundle.
+  Future<void> _saveToPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final bundle = {
@@ -245,9 +211,9 @@ class MissionService {
         'missions': jsonEncode(_activeMissions.map((m) => m.toJson()).toList()),
       };
       await prefs.setString(_bundleKey, jsonEncode(bundle));
-      debugPrint('[MissionService] Mirror to SharedPreferences SUCCESS');
+      debugPrint('[MissionService] SAVE SUCCESS');
     } catch (e) {
-      debugPrint('[MissionService] Mirror to SharedPreferences FAILED: $e');
+      debugPrint('[MissionService] SAVE FAILED: $e');
     }
   }
 

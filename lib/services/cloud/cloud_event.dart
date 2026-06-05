@@ -1,23 +1,9 @@
-import 'package:hive/hive.dart';
-
-part 'cloud_event.g.dart';
-
 /// A timestamped event to be sent to the cloud.
-@HiveType(typeId: 0)
-class CloudEvent extends HiveObject {
-  @HiveField(0)
+class CloudEvent {
   final String id;
-
-  @HiveField(1)
   final DateTime timestamp;
-
-  @HiveField(2)
   final String eventType;
-
-  @HiveField(3)
   final Map<String, dynamic> payload;
-
-  @HiveField(4)
   int retryCount;
 
   CloudEvent({
@@ -34,5 +20,16 @@ class CloudEvent extends HiveObject {
         'ts': timestamp.millisecondsSinceEpoch,
         'type': eventType,
         'payload': payload,
+        'retryCount': retryCount,
       };
+
+  factory CloudEvent.fromJson(Map<String, dynamic> json) {
+    return CloudEvent(
+      id: json['id'] as String,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(json['ts'] as int),
+      eventType: json['type'] as String,
+      payload: json['payload'] as Map<String, dynamic>,
+      retryCount: json['retryCount'] as int? ?? 0,
+    );
+  }
 }
