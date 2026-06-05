@@ -13,6 +13,10 @@ import java.util.concurrent.Executors
 class CloudManager(private val context: Context) {
 
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    // Flutter's shared_preferences plugin stores values in a separate file
+    // with a "flutter." key prefix. Config is set from Flutter UI, so we must
+    // read it from Flutter's prefs file. Queue stays in default prefs.
+    private val flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
     private val QUEUE_KEY = "cloud_event_queue"
     private val executor = Executors.newSingleThreadExecutor()
 
@@ -114,8 +118,8 @@ class CloudManager(private val context: Context) {
     }
 
     private fun getEndpointUrl(): String? {
-        val baseUrl = prefs.getString("cloud_base_url", "http://200.13.5.20:8080") ?: return null
-        val token = prefs.getString("cloud_device_token", "") ?: return null
+        val baseUrl = flutterPrefs.getString("flutter.cloud_base_url", "http://200.13.5.20:8080") ?: return null
+        val token = flutterPrefs.getString("flutter.cloud_device_token", "") ?: return null
         if (token.isEmpty()) return null
         return "$baseUrl/api/v1/$token/telemetry"
     }

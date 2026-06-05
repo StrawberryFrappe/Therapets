@@ -1,9 +1,9 @@
 # Therapets Factory State
 
 ## 1. Project State
-- **Status:** Delivered - Stage 6 Complete (Custom Multilingual Documentation & Agents)
-- **Current Objective:** Concluded the documentation overhaul and agent scaffolding. Next cycle will focus on actual screenshot insertion by user and active telemetry validation.
-- **Last Sync:** 2026-05-25
+- **Status:** Active - Cloud Telemetry Fix
+- **Current Objective:** Fixed native CloudManager reading cloud credentials from wrong SharedPreferences file, causing all telemetry to be silently dropped.
+- **Last Sync:** 2026-06-04
 
 ## 2. Full Backlog
 - [x] Migrate Cloud pushes (Thingsboard HTTP) and Mission tallies to Native to survive Flutter Engine suspension.
@@ -11,6 +11,7 @@
 - [x] Implement robust error handling for `bio_signal_processor.dart` when receiving corrupted BLE packets.
 - [x] Create dedicated agents for technical documentation and github pages optimization.
 - [x] Redesign Jekyll-based usage manual with a premium multilingual glassmorphism/pastel design, comprehensive guides, and Mermaid.js diagrams.
+- [x] Fix native CloudManager SharedPreferences file mismatch preventing cloud telemetry delivery.
 
 ## 3. History Log
 
@@ -25,3 +26,4 @@
 - **[2026-05-24]**: Fixed SBR minigame mechanics by stopping the upward speed multiplier from compounding into bounce velocity, which was causing the ball to continuously gain speed. Swapped the flipped left/right instruction images in the calibration overlay.
 - **[2026-05-25]**: Created `technical_writer` and `github_pages_specialist` agents, added them to `AGENTS.md`. Designed and implemented a beautiful glassmorphism-pastel jekyll layout from scratch. Translated and rewrote all manual pages in both Spanish and English, including detailed step-by-step guides for BLE sync state, daily missions grace windows, updates, telemetry calibration, and architecture diagrams rendered via dynamic Mermaid.js.
 - **[2026-05-29]**: Audited and fixed data persistence bugs causing coins/stats to reset. Removed Hive dependencies entirely to eliminate race conditions and dual-store desync. Migrated to a unified SharedPreferences JSON atomic bundle architecture, and added native swipe-to-flush via `BleForegroundService.onTaskRemoved`.
+- **[2026-06-04]**: Fixed native `CloudManager.kt` SharedPreferences file mismatch. Native code was reading `cloud_base_url` and `cloud_device_token` from `getDefaultSharedPreferences()` (wrong file), while Flutter UI writes them to `FlutterSharedPreferences` with `flutter.` key prefix. Added `flutterPrefs` handle to read config from correct file. Queue storage remains in default prefs to avoid cross-contamination.
