@@ -2,6 +2,17 @@
 
 A Flutter-based virtual pet app that uses a custom BLE hardware companion (M5-IMU-Sensor) to bring your pet to life through motion controls and real-time telemetry.
 
+## 📖 Documentation
+
+Full user manual **and** developer/handoff reference (bilingual ES/EN, dark theme):
+**[Therapets Manual](https://strawberryfrappe.github.io/Therapets/)** ·
+[English](https://strawberryfrappe.github.io/Therapets/en/)
+
+Covers installation, BLE pairing, pet care, minigames, settings — plus architecture,
+the BLE packet protocol, the native Android layer, telemetry/cloud, data model,
+CI/CD, and how to extend the app. Source lives in [`/docs`](docs/) (Jekyll + Just the
+Docs). To edit, see *Editing This Documentation* in the dev section.
+
 ## Download Builds
 
 | Channel | Build Type | Download Link |
