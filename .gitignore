@@ -80,8 +80,8 @@ com_crashlytics_export_strings.xml
 
 # Reference libraries and artifacts (Selective tracking)
 artifacts/*
-!artifacts/gy906_connection/
-!artifacts/IMU_BLE_Connection/
+!artifacts/M5StickC_old/
+!artifacts/M5StickS3_new/
 !artifacts/*.md
 
 # Antigravity Factory setup

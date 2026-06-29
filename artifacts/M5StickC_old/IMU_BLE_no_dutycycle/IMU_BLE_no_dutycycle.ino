@@ -55,6 +55,7 @@
 */
 
 // --- CONFIG ---
+// M5StickC (old device) Grove/Port-A I2C pins.
 #define SDA_PIN 32
 #define SCL_PIN 33
 #define MAX30100_ADDR 0x57
@@ -245,37 +246,9 @@ void loop() {
     M5.Imu.getAccel(&ax, &ay, &az);
     M5.Imu.getGyro(&gx, &gy, &gz);
 
-    // 2. Read Bio Sensor (Software I2C)
+    // 2. Read Bio Sensor (Software I2C) - continuous, no duty-cycle
     if (sensorFound) {
-        static bool isVitalsActive = true;
-        bool currentVitalsActive = (millis() % 20000) < 10000;
-        
-        if (currentVitalsActive != isVitalsActive) {
-            isVitalsActive = currentVitalsActive;
-            if (isVitalsActive) {
-                // Wake up MAX30100
-                writeRegister(0x06, 0x03); // Mode = SpO2 + HR
-                writeRegister(0x09, 0xFF); // LED Current = MAX (50mA)
-                // Clear FIFO tracking
-                writeRegister(0x02, 0x00);
-                writeRegister(0x03, 0x00);
-                writeRegister(0x04, 0x00);
-            } else {
-                // Shut down MAX30100
-                writeRegister(0x06, 0x00); // Shutdown Mode
-                writeRegister(0x09, 0x00); // LEDs off
-                global_rawIR = 0;
-                global_rawRed = 0;
-            }
-        }
-        
-        if (isVitalsActive) {
-            readFIFO();
-        } else {
-            // Guarantee empty sensor output during inactive phase
-            global_rawIR = 0;
-            global_rawRed = 0;
-        }
+        readFIFO();
     }
 
     // 3. Pack Payload for Flutter
