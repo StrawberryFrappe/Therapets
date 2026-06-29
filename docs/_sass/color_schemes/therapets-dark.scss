@@ -1,0 +1,29 @@
+// Therapets dark color scheme — black background, purple accent.
+// Just the Docs imports this file to override the default (light) variables
+// before the base styles are compiled.
+
+$color-scheme: dark;
+
+// Backgrounds
+$body-background-color:        #0d0d12;
+$sidebar-color:                #14141b;
+$search-background-color:      #1b1b24;
+$table-background-color:       #14141b;
+$code-background-color:        #16161f;
+$feedback-color:               #14141b;
+
+// Text
+$body-heading-color:           #f3f0ff;
+$body-text-color:              #c9c6d6;
+$nav-child-link-color:         #aaa7bd;
+$search-result-preview-color:  #9794a8;
+$body-quote-color:             #b9b6c8;
+
+// Purple accent
+$link-color:                   #b794ff;
+$btn-primary-color:            #7c3aed;
+$base-button-color:            #1f1f2a;
+$nav-active-color:             #ffffff;
+
+// Borders
+$border-color:                 #2a2a37;

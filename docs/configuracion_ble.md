@@ -1,22 +1,78 @@
 ---
-title: "Conexión BLE"
+title: Conexión BLE
+parent: Guía del Usuario
 lang: es
+nav_order: 2
+description: "Enlaza el sensor M5, entiende los estados de sincronización y resuelve problemas de conexión."
 ---
 
-# Configuración de Conexión BLE
+# Conexión BLE
+{: .no_toc }
 
-Para que Therapets registre tu actividad y puedas progresar, necesitas conectar tu sensor inteligente mediante Bluetooth Low Energy (BLE).
+1. TOC
+{:toc}
 
-## Pasos para Conectar
+## Enlazar el sensor
 
-1. **Abre la aplicación** y asegúrate de que el Bluetooth de tu teléfono esté encendido.
-2. Ve a la pantalla principal y presiona el ícono de **Conectar Dispositivo**.
-3. El sistema comenzará a buscar dispositivos Therapets cercanos.
-4. Selecciona tu dispositivo de la lista. Una vez conectado, el ícono cambiará a color verde.
+1. Enciende el sensor **M5** y mantenlo cerca del teléfono.
+2. Abre Therapets y ve a **Ajustes**.
+3. En la sección de dispositivo, pulsa **Scan for devices**.
+4. Selecciona tu sensor en la lista de dispositivos encontrados.
+5. La app se conecta y **recuerda** el dispositivo: en adelante se reconecta sola.
 
-![Pantalla de Conexión BLE](/assets/images/ble_setup_es.png)
+Una vez enlazado, la app inicia un **servicio en segundo plano** que mantiene la
+conexión viva aunque cierres la app o apagues la pantalla.
 
-## Solución de Problemas
+## Variantes del sensor
 
-- **Si el dispositivo se desconecta:** No te preocupes. La aplicación congelará tu historial en la pantalla (mostrando "Esperando...") y si te reconectas en menos de 30 segundos, todo continuará exactamente donde lo dejaste.
-- **Nota:** La información en la nube se registra en tiempo real, por lo que el tiempo desconectado no sumará progreso.
+La app detecta automáticamente el tipo de sensor por el **tamaño del paquete BLE**
+(detección "pegajosa": se fija con el primer paquete y no cambia hasta desconectar):
+
+| Variante | Paquete | Pantalla dedicada |
+|----------|---------|-------------------|
+| **MAX30100** (oxímetro) | 16 bytes | [Sensores → Oxímetro](sensores.html) |
+| **GY906** (temperatura) | 14 bytes | [Sensores → Temperatura](sensores.html) |
+
+## Estados de sincronización
+
+El HUD muestra cuatro estados. Solo **Sincronizado** hace feliz a tu mascota:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Buscando
+    Buscando --> Esperando: hay sensor guardado
+    Esperando --> Conectado: sensor enlazado
+    Conectado --> Sincronizado: humano detectado
+    Sincronizado --> Conectado: ya no hay humano
+    Conectado --> Esperando: se pierde la conexión
+```
+
+| Estado | Significado |
+|--------|-------------|
+| **Sincronizado** | Sensor conectado **y** humano detectado. La felicidad sube. |
+| **Conectado** | Sensor conectado, pero sin detectar a una persona. |
+| **Esperando** | Desconectado, pero hay un sensor recordado (reintenta solo). |
+| **Buscando** | Desconectado y sin sensor recordado. |
+
+### ¿Cómo se "detecta a un humano"?
+
+- **MAX30100:** detecta dedo/muñeca por la señal IR, calcula pulso y SpO₂
+  estables durante ~0,5 s.
+- **GY906:** detecta temperatura de piel del antebrazo en rango **29,7 °C – 41 °C**
+  sostenida ~0,5 s.
+
+Hay una **ventana de gracia** para que parpadeos breves de la lectura no rompan el
+estado *Sincronizado* de inmediato.
+
+## Solución de problemas
+
+| Problema | Solución |
+|----------|----------|
+| No aparece el sensor al escanear | Verifica que esté encendido y que el Bluetooth del teléfono esté activo. Acércalo. |
+| Se conecta pero no sincroniza | Asegúrate de llevar el sensor en contacto con la piel (muñeca/antebrazo). |
+| Se desconecta con la pantalla apagada | Concede la exención de optimización de batería ([Instalación](instalacion.html)). |
+| Se desconecta al reiniciar el teléfono | La app reanuda el servicio al arrancar; ábrela una vez tras el reinicio si no reconecta. |
+
+> Detalle técnico del protocolo y el procesamiento de señal en
+> [Capa BLE y Protocolo](ble_protocolo.html).
+{: .note }

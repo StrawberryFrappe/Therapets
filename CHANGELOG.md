@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+- **Documentation Overhaul**: Rebuilt the GitHub Pages manual on the Just the Docs
+  theme (dark mode, search, auto sidebar). Added a complete bilingual (ES/EN) manual
+  covering both end users and developers: install, BLE pairing, pet care, store,
+  wardrobe, missions, minigames, sensors, settings, plus a full handoff reference
+  (architecture, BLE packet protocol, native Android layer, telemetry/cloud, data
+  model, CI/CD, extending the app, i18n). Embedded real app screenshots.
 - **Architectural & Code Audit Remediation**:
   - **Native Mission System**: Created `MissionManager.kt` to evaluate missions based on JSON configuration directly from Native Android to ensure survival during Flutter Engine suspension.
   - **Offline Cloud Logs**: Configurable offline cloud logging inside `BleForegroundService.kt` to ensure disconnected time logs continuously if `enable_disconnected_cloud_logs` is enabled.

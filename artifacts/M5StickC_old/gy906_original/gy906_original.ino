@@ -35,6 +35,7 @@
 */
 
 // --- CONFIG ---
+// M5StickC (old device) Grove/Port-A I2C pins.
 #define SDA_PIN 32
 #define SCL_PIN 33
 // MLX90614 Standard Address

@@ -1,10 +1,65 @@
-theme: null
-title: Therapets Manual
-description: Documentación oficial y visión del sistema Therapets.
-# Variables para la navegación global
+title: Therapets
+description: Manual de usuario y documentación técnica del sistema Therapets.
+lang: es
+
+# --- Theme (Just the Docs via remote_theme; works on GitHub Pages) ---
+remote_theme: just-the-docs/just-the-docs
+
+# Custom dark color scheme (black + purple). See _sass/color_schemes/therapets-dark.scss
+color_scheme: therapets-dark
+
+# --- Search ---
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+  rel_url: true
+  button: true
+
+# --- Mermaid diagrams (rendered natively by Just the Docs) ---
+mermaid:
+  version: "10.9.1"
+
+# --- Top-right auxiliary links ---
+aux_links:
+  "GitHub ↗":
+    - "https://github.com/StrawberryFrappe/Therapets"
+aux_links_new_tab: true
+
+# --- Navigation / UX ---
+heading_anchors: true
+back_to_top: true
+back_to_top_text: "↑ Volver arriba"
+
+# --- Callouts (used as {: .note } / {: .warning } / {: .tip }) ---
+callouts:
+  note:
+    title: Nota
+    color: purple
+  tip:
+    title: Tip
+    color: green
+  warning:
+    title: Atención
+    color: yellow
+  danger:
+    title: Importante
+    color: red
+
+# Apply the Just the Docs "default" layout to every page
 defaults:
-  -
-    scope:
+  - scope:
       path: ""
     values:
-      layout: "default"
+      layout: default
+
+# --- GitHub Pages plugins ---
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+# Exclude repo noise from the build
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor
