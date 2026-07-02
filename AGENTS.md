@@ -26,6 +26,8 @@
 ## Unified Sync State Vision (April 2026 Audit)
 The "Sync State" dictates Cloud Telemetry, UI Display, and Daily Missions. It bridges hardware limitations (IoT 10s sensor sleep cycles) and OS constraints. 
 
+> **Firmware update (June 2026):** New firmware no longer duty-cycles the sensor — it stays always on. The app now defaults to **strict** presence (small cushion, real-time) via `PresenceProfile.alwaysOn()`. The duty-cycle bridging in **Case 1** below applies **only in lenient mode** (`PresenceProfile.dutyCycle()`), selected app-wide by the "Lenient Sensor Mode" toggle in Advanced Settings (persisted in `GameSettings.presenceMode`). All duty-cycle thresholds (grace window, no-human debounce, 0.33 barrage ratio, freshness timeout, zero-means-absent) live in `lib/services/device/presence_profile.dart` and are injected by `DeviceService` into the bio/temperature processors and `DeviceStatusAggregator`. In strict mode the barrage vote is disabled and sync keys off the live reading.
+
 **Case 1: Bad Readings / IoT 10s Sleep Cycle**
 - **Trigger**: BLE connected, `humanDetected` flips false.
 - **Action**: 15-second Grace Window. Push the *last recorded state* to the history array (do not hardcode `true`, prevents corrupting history if already false).
