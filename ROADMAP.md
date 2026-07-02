@@ -1,0 +1,262 @@
+# Therapets — Wind-Down Roadmap & Handoff Plan
+
+> **Purpose.** Development is wrapping up. This file is the master plan to get the app
+> into a shippable, documented, hand-off-ready state across multiple work sessions.
+> It is the single source of truth for *what is left and in what order*.
+>
+> **Audience.** Us, session to session. A new developer should be able to read this +
+> the docs site + the ADRs and pick up the project with minimal friction.
+>
+> **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (see note)
+>
+> _Last updated: 2026-07-02_
+
+---
+
+## 0. End-state vision (what "done" means)
+
+The app is a Flutter virtual-pet companion driven by a BLE hardware sensor (M5Stick +
+IMU + MAX30100 pulse-ox **or** GY906 IR-temp). It is **no longer in a development phase** —
+it is a maintained product being handed off. "Done" for this wind-down:
+
+1. New/current hardware (**M5 Stick S3**) is supported and verified.
+2. A health professional can, from the web platform, define which minigames a given
+   user (identified by device token) may play — the app respects that allow-list.
+3. Minigames have difficulty where it makes sense; nothing in the app is visibly broken.
+4. The app is robust: BLE finds the device quickly, coins/missions/telemetry survive
+   backgrounding and app kills, notifications fire in the background, sync status is
+   truthful, no background crashes.
+5. Docs (README, user manual, dev/handoff manual, ADRs) are accurate and de-scoped from
+   "in development" language. The decisions currently living only in the author's head
+   are written down as ADRs.
+6. Git is clean: no stale branches/PRs, clear history, a documented branch strategy.
+
+---
+
+## 1. Priority & sequencing
+
+**Two deadlines (owner, 2026-07-02):**
+- **~2–3 days** — the boss's user-facing must-ships: **#4 difficulty, #3 web allowlist,
+  #2 S3 verify.** These come FIRST.
+- **~6 days tops** — everything else: git cleanup, robustness, docs/ADRs, stretch.
+
+So the must-ships are front-loaded; git cleanup and docs are deferred into the back half.
+Git cleanup is *not* a prerequisite for the feature work — do a 10-min triage now if it
+helps, but the full pass waits.
+
+| Order | Phase | Must-ship? | Target | Size |
+|------|-------|-----------|--------|------|
+| 1 | #4 SBR difficulty selector | ✅ hard | day 1 | 1 session |
+| 2 | #3 Web game-allowlist (build to the seam) | ✅ hard | days 1–3 | 2–3 sessions |
+| 3 | #2 M5 Stick S3 verification pass | ✅ hard | day 3 | 1 session |
+| — | *(above due ~day 2–3)* | | | |
+| 4 | Git cleanup + branch-strategy doc | foundation | days 4–6 | 1 session |
+| 5 | #5 Robustness — confirmed-live bugs | important | days 4–6 | 2–3 sessions |
+| 6 | #1 Documentation + ADRs + README de-scope | important | days 4–6 | 2 sessions |
+| 7 | Stretch — Orchestra rework + full bug hunt | nice-to-have | if time | open |
+
+> Phase *numbers below still describe the same work* — just execute in the **Order** column
+> above. Detail sections are unchanged; only the running order moved.
+
+---
+
+## 2. Conventions — where things go
+
+Decided with the project owner. Keep new-dev-facing material free of our agentic-coding
+workflow (a new dev may not use Claude Code the same way).
+
+- **This file (`ROADMAP.md`)** — our cross-session working tracker. Check boxes as we go.
+- **`FACTORY.md`** — existing agentic-factory backlog. Keep it in sync but do **not** make
+  the new-dev handoff *depend* on understanding it.
+- **`docs/adr/NNNN-title.md`** — Architecture Decision Records. Dev-facing, in-repo. This is
+  where the "author's brain" decisions get written down. (Dir to be created in Phase 1/5.)
+- **GitHub Issues** — discrete bugs and anything out-of-scope for the wind-down, so a new
+  dev sees them on GitHub. Use `gh issue create`.
+- **Docs site (`/docs`, Just the Docs, bilingual ES/EN)** — end-user + developer manual.
+  Must be accurate before handoff; link ADRs from the dev section.
+
+---
+
+## 3. Phase detail
+
+### Phase 1 — Git cleanup + planning foundation
+Clean base first: unblocks everything and makes the repo legible to a new dev.
+
+- [x] Inventory every remote branch and open PR. **DONE 2026-07-02.** Outcome:
+  - Closed stale bump PRs #23 + #27.
+  - Deleted 23 dead remote branches + 1 local; only `main`/`dev`/`unstable` remain.
+    `copilot/fix-coin-and-missions-loss` (was 6 ahead) verified superseded by the
+    native persistence rewrite (`MissionService.save` → `_enqueueSave` on `unstable`;
+    currency-order + `detached`-flush moot under native authority) → deleted.
+  - Local `main`/`unstable` synced; stale remote-tracking refs pruned.
+- [x] Close stale PRs #23 and #27 with a one-line reason. **DONE.**
+- [x] Delete confirmed-dead remote branches (keep `main`, `dev`, `unstable`). **DONE.**
+- [x] Document the branch strategy — captured in **ADR-0009** (`docs/adr/`), incl. the
+      broken-USB-C origin story. `main` = stable, `dev` = nightly, `unstable` = sandbox.
+- [x] Create `docs/adr/` and seed ADR index. **DONE** — index + template + ADRs 0001–0010.
+- [x] Refresh `FACTORY.md` backlog to reflect this roadmap. **DONE 2026-07-02.**
+
+**Acceptance:** ✅ `git branch -a` shows only live branches; no stale open PRs; branch
+policy written (ADR-0009); `docs/adr/` exists; `FACTORY.md` refreshed.
+
+---
+
+### Phase 2 — #4 SBR difficulty selector (hard must-ship)
+Self-contained win. Copy the pattern already proven in Flappy Bird.
+
+- [ ] Model SBR difficulty on `lib/game/minigames/flappy_bird/flappy_difficulty.dart`
+      (`FlappyDifficulty` enum + `FlappyDifficultyConfig` preset map: easy/medium/hard/extreme).
+- [ ] Identify SBR tunables in `lib/game/minigames/sbr/sbr_game.dart` (ball speed, brick
+      rows/layout, bumper size, power-up rate, speed ramp) and factor them into a
+      `SbrDifficultyConfig`.
+- [ ] Add difficulty picker UI in `sbr_screen.dart` (mirror Flappy's selector; reuse
+      numbered 1–4 labels — see FACTORY note about not discouraging young players).
+- [ ] Localize new strings in `lib/l10n/app_en.arb` + `app_es.arb` and regenerate
+      (`flutter gen-l10n`).
+- [ ] Test: `flutter test`; manual golden-path run of SBR at each level.
+
+**Acceptance:** SBR launches with a 1–4 difficulty picker; each level measurably differs;
+ES/EN strings present; tests pass.
+
+---
+
+### Phase 3 — #3 Web game-allowlist (hard must-ship, partially blocked)
+**Decision (owner):** the web platform will expose a JSON that lists the games a user
+(device token) is allowed to play. The app **fetches** that list by device token; we likely
+need an **adapter** to normalize whatever shape the web API returns. Build everything up to
+the network seam so only the real request/parse needs filling in when the web details land.
+
+- [ ] **ADR first:** `docs/adr/NNNN-game-allowlist.md` — data model, source of truth,
+      offline behavior (cache last-known allow-list; fail-open or fail-closed?), refresh
+      cadence, identity = device token.
+- [ ] Define an `AllowedGames` model + `GameAllowlistService` with a clean interface:
+      `Future<Set<GameId> > fetchAllowedGames(String deviceToken)`.
+- [ ] **Adapter seam:** put the real HTTP/ThingsBoard call behind an interface so the parser
+      can be swapped once the web JSON shape is known. Provide a stub/fake returning "all
+      games allowed" so the app works today.
+- [ ] Wire gating into the game launcher (`lib/screens/widgets/menus/game_menu.dart` /
+      `game_screen.dart` / `minigame_screen.dart`): disable/hide games not in the allow-list.
+- [ ] Cache the last-known allow-list in SharedPreferences (JSON bundle, per project
+      persistence convention) so it survives offline/relaunch.
+- [ ] Localize any new UI (e.g. "This game is disabled by your therapist").
+- [ ] Test: unit-test the service + adapter with a fake; verify gating in UI.
+
+- [!] **BLOCKED (open question for coworkers):** exact web API — endpoint, auth, and JSON
+      schema for the per-token game list. Likely a ThingsBoard **server/shared attribute**
+      on the device (e.g. `GET /api/v1/{token}/attributes`) rather than the telemetry POST we
+      use now, but **confirm**. Capture the answer in the ADR, then finish the adapter.
+- [!] **Two cloud hosts (likely intentional):** owner's read of the WhatsApp group —
+      `.20` = ThingsBoard (telemetry, matches code default in
+      `lib/services/cloud/cloud_service.dart`), `.19` = the web platform/page. Unconfirmed.
+      So the allow-list fetch may hit **`.19` (web)** or ThingsBoard attributes on **`.20`** —
+      settle this when you get the API details, and don't assume one base URL covers both.
+
+**Acceptance:** with the stub, all games show; swapping the stub for the real adapter (once
+web details arrive) gates games by token; allow-list cached offline; ADR written.
+
+---
+
+### Phase 4 — #5 Robustness (confirmed-live / unverified bugs)
+Targeted fixes for what the owner confirmed still reproduces or hasn't verified. The broad
+"top-to-bottom bug hunt" is Phase 7.
+
+- [ ] **BLE detect slow/fails.** Audit scan start/timeout/filters in
+      `lib/services/device/bluetooth_service.dart` and native
+      `android/app/.../BleForegroundService.kt` (FACTORY notes prior fixes to "unbounded
+      scanning" and reconnect backoff — verify they hold; check scan filters aren't too
+      strict for the S3 advertising name/UUID).
+- [ ] **Notifications silent unless app open.** Verify the foreground-service notification
+      channel + `pet_notification_service.dart` fire from native while backgrounded; check
+      Android 13+ `POST_NOTIFICATIONS` runtime grant path (note: project forbids
+      `permission_handler` — uses platform prompts).
+- [ ] **Background crash.** Reproduce, capture `adb logcat` stack, fix. Suspect areas:
+      Flutter engine suspension vs native `BleForegroundService`/`CloudManager`/
+      `MissionManager` lifecycle.
+- [ ] **UI inconsistencies.** Enumerate concrete cases (screenshot/notes) before fixing —
+      turn each into a checklist item or GitHub issue.
+- [ ] Re-verify the "believed-fixed" ones instead of trusting them:
+      coins/missions persistence (FACTORY says fixed 2026-05-29) and background telemetry
+      delivery (cloud-cred file fix 2026-06-04). Add/keep persistence tests green.
+- [ ] Test: `flutter test` (persistence suite is mandatory before any push per AGENTS.md).
+
+**Acceptance:** each confirmed bug has a repro→fix→verify note; persistence + lifecycle
+tests pass; notifications fire backgrounded on a real device.
+
+---
+
+### Phase 5 — #1 Documentation + ADRs + README de-scope
+Make the docs trustworthy and write down the tribal knowledge.
+
+- [ ] **README:** remove "Development Status / Stage 5 / stage history" framing; replace with
+      a maintained-product overview. Fix the `flutter run` quick-start (currently PowerShell
+      block — owner is on Linux; make it OS-neutral).
+- [ ] **Validate the docs site** (`/docs`, ES + EN) against current code — architecture
+      diagram, BLE packet protocol, native layer, data model, telemetry/cloud, i18n. Fix
+      drift. (Owner cannot personally vouch for its current accuracy.)
+- [x] **Write ADRs** (`docs/adr/`) — **DONE 2026-07-02**, rationale captured from owner:
+  - `0001` Native-authoritative architecture (Kotlin source of truth).
+  - `0002` SharedPreferences JSON bundles over Hive (cross-language + corruption).
+  - `0003` Firmware-aware presence profiles (strict-by-default / lenient duty-cycle).
+  - `0004` `provider` as service locator, not reactive state (streams/Flame own state).
+  - `0005` No `permission_handler`; native BLE-channel permissions (+ code warning added).
+  - `0006` Sticky device-type by packet size (avoided a self-ID handshake; known swap bug).
+  - `0007` Truthful telemetry + bounded UX grace (clinical honesty vs PoC sensor flakiness).
+  - `0008` Push-only cloud (simplicity; being revisited for the allowlist read; two-host
+    `.19`/`.20` split reason unknown — flagged as open).
+  - `0009` Three-branch pipeline (broken USB-C → OTA nightly/experimental channels).
+  - `0010` Corrupted-packet heuristics (IMU > 10g; IR |Δ| > 20000).
+  - **Pending:** game-allowlist ADR — write during Phase 3 once web API is designed.
+  - *Note:* `flutter.`-prefix credential gotcha lives in ADR-0002 (not its own ADR).
+- [x] **README:** de-scoped — removed Stage-5 framing → Features section; OS-neutral quick
+      start; Project Structure updated to match real `lib/` tree. **DONE.**
+- [ ] Link the ADR index (`docs/adr/`) from the dev docs section of the Jekyll manual.
+
+**Acceptance:** README reads as a finished product; docs match code; all listed ADRs exist
+and are linked; a new dev can onboard from docs alone. (Jekyll-manual link-in still pending —
+deployed docs intentionally untouched this session.)
+
+---
+
+### Phase 6 — #2 M5 Stick S3 verification (hard must-ship, do near end)
+Owner tested S3 today and it worked; this is a verification/guard pass, not new build.
+
+- [ ] Diff `artifacts/M5StickS3_new/*` firmware vs `artifacts/M5StickC_old/*`; document
+      what changed and which `.ino` variant is the shipping one (battery / no_dutycycle /
+      original) for each sensor.
+- [ ] Confirm the app's BLE scan filter + packet-size sticky detection work with the S3's
+      advertised name/service across both sensor variants.
+- [ ] Full manual smoke: pair, telemetry, both sensors, minigames, cloud push, notifications,
+      background survival — on S3 hardware.
+- [ ] Re-test the device-switch sticky-type bug (swap temp↔pulse) now that both devices are
+      on hand (see memory `device-switch-sticky-type`).
+- [ ] Document the flashing procedure (Arduino/PlatformIO, board, libs) in the docs.
+
+**Acceptance:** S3 verified end-to-end on hardware; firmware variants documented; flashing
+steps written; sticky-type swap re-tested.
+
+---
+
+### Phase 7 — Stretch (nice-to-have)
+- [ ] **Orchestra rework.** Owner: the movement-based cursor + gesture-as-orders attempt
+      "went horrible"; it's the biggest thing that works badly. Redesign the interaction
+      (`lib/game/minigames/orchestra/`) — simpler, reliable mapping — or scope it down.
+- [ ] **Full top-to-bottom bug hunt.** Systematic pass across all screens/services (owner
+      explicitly wants this — later, not now). File findings as GitHub issues.
+
+---
+
+## 4. Open questions / blockers (chase these)
+
+- [ ] **Web API for the game allow-list** (Phase 3) — endpoint, auth, JSON schema, keyed by
+      device token. *→ ask coworkers.*
+- [ ] **Cloud host `.19` vs `.20`** — likely `.20` = ThingsBoard, `.19` = web platform (per
+      WhatsApp group, unconfirmed). Confirm which serves the allow-list. *→ ask coworkers.*
+
+_(Branch strategy resolved: `main` stable / `dev` nightly / `unstable` experimental sandbox
+— documented in Phase 1.)_
+
+## 5. Guardrails (from AGENTS.md — do not violate)
+- Run `flutter test` and keep persistence tests green **before** any commit/push.
+- Local storage = SharedPreferences atomic JSON bundles. **Hive forbidden.**
+- No `permission_handler`; use platform prompts.
+- State management = `provider`.
