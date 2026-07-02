@@ -722,25 +722,25 @@ abstract class AppLocalizations {
   /// **'Difficulty'**
   String get difficultyLabel;
 
-  /// No description provided for @difficultyEasy.
+  /// Difficulty level label shown as a number; 1 = easiest, 4 = hardest.
   ///
   /// In en, this message translates to:
   /// **'1'**
   String get difficultyEasy;
 
-  /// No description provided for @difficultyMedium.
+  /// Difficulty level label shown as a number; 1 = easiest, 4 = hardest.
   ///
   /// In en, this message translates to:
   /// **'2'**
   String get difficultyMedium;
 
-  /// No description provided for @difficultyHard.
+  /// Difficulty level label shown as a number; 1 = easiest, 4 = hardest.
   ///
   /// In en, this message translates to:
   /// **'3'**
   String get difficultyHard;
 
-  /// No description provided for @difficultyExtreme.
+  /// Difficulty level label shown as a number; 1 = easiest, 4 = hardest.
   ///
   /// In en, this message translates to:
   /// **'4'**
