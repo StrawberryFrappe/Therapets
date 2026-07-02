@@ -6,6 +6,7 @@ import 'bluetooth_service.dart';
 import 'bio_signal_processor.dart';
 import 'temperature_signal_processor.dart';
 import 'device_status_aggregator.dart';
+import '../../game/game_settings.dart';
 import '../../game/models/telemetry_data.dart';
 export 'bluetooth_service.dart' show BluetoothUserAction, BluetoothUserActionType;
 export 'bio_signal_processor.dart' show BioData;
@@ -130,6 +131,7 @@ class DeviceService {
     isHumanDetectedProvider: _isHumanDetected,
     isMinigameRunningProvider: () => _activeMinigames > 0,
     hasRecentTelemetryProvider: () => _hasFreshTelemetryForUi,
+    profile: GameSettings.presenceProfile,
   );
 
   DeviceDisplayStatus get currentDisplayStatus => _statusAggregator.currentDisplayStatus;
@@ -160,13 +162,13 @@ class DeviceService {
   DeviceType get deviceType => _deviceType;
 
   // Bio signal processing (MAX30100)
-  final BioSignalProcessor _bioProcessor = BioSignalProcessor();
+  final BioSignalProcessor _bioProcessor = BioSignalProcessor(profile: GameSettings.presenceProfile);
   Stream<BioData> get bioData$ => _bioProcessor.bioData$;
   BioData get latestBioData => _bioProcessor.latestBioData;
   List<double> get waveformData => _bioProcessor.getWaveformData();
   
   // Temperature signal processing (GY906)
-  final TemperatureSignalProcessor _tempProcessor = TemperatureSignalProcessor();
+  final TemperatureSignalProcessor _tempProcessor = TemperatureSignalProcessor(profile: GameSettings.presenceProfile);
   Stream<TemperatureData> get temperatureData$ => _tempProcessor.temperatureData$;
   TemperatureData get latestTemperatureData => _tempProcessor.latestData;
   List<double> get temperatureWaveformData => _tempProcessor.getWaveformData();
@@ -399,14 +401,28 @@ class DeviceService {
   
   /// Check if bio reading is still fresh (within timeout).
   /// Useful for determining if last reading should be displayed.
-  BioData? getFreshBioReading([Duration timeout = const Duration(seconds: 60)]) {
+  BioData? getFreshBioReading([Duration? timeout]) {
     return _bioProcessor.getFreshValidReading(timeout);
   }
-  
+
   /// Check if temperature reading is still fresh (within timeout).
   /// Useful for determining if last reading should be displayed.
-  TemperatureData? getFreshTemperatureReading([Duration timeout = const Duration(seconds: 60)]) {
+  TemperatureData? getFreshTemperatureReading([Duration? timeout]) {
     return _tempProcessor.getFreshValidReading(timeout);
+  }
+
+  /// Re-read [GameSettings.presenceMode] and push the resulting profile into the
+  /// processors + aggregator, resetting their state. Call after the user flips
+  /// the presence-mode toggle in Advanced Settings.
+  void applyPresenceMode() {
+    final profile = GameSettings.presenceProfile;
+    _bioProcessor.profile = profile;
+    _tempProcessor.profile = profile;
+    _statusAggregator.profile = profile;
+    _bioProcessor.reset();
+    _tempProcessor.reset();
+    _statusAggregator.reset();
+    _emitDisplayStatus(currentDisplayStatus);
   }
 
   void dispose() {

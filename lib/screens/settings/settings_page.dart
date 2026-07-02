@@ -49,6 +49,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _fakeSyncValue = false;
   // SBR upward speed multiplier
   double _sbrUpwardMultiplier = 1.5;
+  // Presence mode (firmware duty-cycle handling)
+  PresenceMode _presenceMode = PresenceMode.strict;
   
   // Cloud configuration
   late final CloudService _cloud;
@@ -94,7 +96,15 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     setState(() {
       _sbrUpwardMultiplier = GameSettings.sbrUpwardSpeedMultiplier;
+      _presenceMode = GameSettings.presenceMode;
     });
+  }
+
+  Future<void> _savePresenceMode(PresenceMode mode) async {
+    await GameSettings.setPresenceMode(mode);
+    widget.device.applyPresenceMode();
+    if (!mounted) return;
+    setState(() => _presenceMode = mode);
   }
 
   Future<void> _saveSbrUpwardMultiplier(double v) async {
@@ -407,7 +417,35 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-          
+
+          const SizedBox(height: 12),
+          // Presence Mode (device firmware sensor duty-cycle handling)
+          Card(
+            color: Colors.grey[900],
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Lenient Sensor Mode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Enable ONLY for old devices whose firmware turns the sensor on and off '
+                    'every ~10s to save battery. Off (default) = new always-on firmware, '
+                    'faster and more accurate presence.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Lenient (old battery-saving firmware)', style: TextStyle(fontSize: 12)),
+                    value: _presenceMode == PresenceMode.lenient,
+                    onChanged: (on) => _savePresenceMode(on ? PresenceMode.lenient : PresenceMode.strict),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // Device-specific buttons (only when connected)
           if (_isConnected) ...[
             const SizedBox(height: 12),
