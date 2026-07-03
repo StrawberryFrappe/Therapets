@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:Therapets/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
@@ -13,30 +12,6 @@ import 'services/locale_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize communication port between task isolate and main isolate.
-  FlutterForegroundTask.initCommunicationPort();
-
-  // Initialize the foreground task plugin with conservative options.
-  FlutterForegroundTask.init(
-    androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'therapets_fg',
-      channelName: 'Therapets Service',
-      channelDescription: 'Foreground service for keeping BLE active',
-      onlyAlertOnce: true,
-    ),
-    iosNotificationOptions: const IOSNotificationOptions(
-      showNotification: false,
-      playSound: false,
-    ),
-    foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(5000),
-      autoRunOnBoot: true,
-      autoRunOnMyPackageReplaced: false,
-      allowWakeLock: true,
-      allowWifiLock: true,
-    ),
-  );
 
   runApp(const BootstrapWrapper());
 }
@@ -93,12 +68,14 @@ class _BootstrapWrapperState extends State<BootstrapWrapper> {
             Provider.value(value: bootstrap.missionService),
             Provider.value(value: bootstrap.petStats),
             Provider.value(value: bootstrap.notificationService),
+            Provider.value(value: bootstrap.treatmentService),
             ChangeNotifierProvider.value(value: bootstrap.localeService),
           ],
           child: AppLifecycleManager(
             petStats: bootstrap.petStats,
             missionService: bootstrap.missionService,
             deviceService: bootstrap.deviceService,
+            treatmentService: bootstrap.treatmentService,
             child: const TherapetsApp(),
           ),
         );

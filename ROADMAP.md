@@ -120,39 +120,69 @@ ES/EN strings present; tests pass.
 
 ---
 
-### Phase 3 — #3 Web game-allowlist (hard must-ship, partially blocked)
+### Phase 3 — #3 Web game-allowlist — **DONE 2026-07-02** (turned out bigger than planned)
+**What actually landed vs. the original plan below:** the web API turned out to return a full
+treatment/prescription record (title, date range, status, daily usage target, enabled games),
+not a bare game list. Built `TreatmentService` (not `GameAllowlistService` — different name,
+same intent) against the real shape. **Read `docs/adr/0011-game-allowlist-treatment-integration.md`
+first** — it has the full picture, confirmed facts, and what's still open. Short version below.
+
+**Confirmed (were open questions, now resolved):**
+- Device token for this endpoint = same value as ThingsBoard's `cloud_device_token`.
+- `usage_time` / `patient_usage_time` are **daily**, in **seconds**.
+- Cloud host split: `.20` = ThingsBoard telemetry (push, unchanged), `.19` = this treatment
+  endpoint (`GET /patients/treatment/by-device-token/:deviceToken`).
+
+**What shipped:**
+- [x] `TreatmentService` (`lib/services/treatment/treatment_service.dart`) — fetch + cache +
+      throttled (15 min) re-poll on bootstrap/resume, backend-name→internal-id mapping table.
+- [x] Fail-open/fail-closed policy, decided explicitly with owner (see ADR-0011): fail-open on
+      any technical failure (network/no-token/cold-start/empty-list), fail-closed only when
+      `status` is positively non-`"active"`.
+- [x] Gating wired into `game_menu.dart` (filters, **hides** non-prescribed games entirely —
+      owner's call, no "disabled by your therapist" UI was built) / `game_screen.dart`.
+- [x] Allow-list cached in SharedPreferences, survives offline/relaunch.
+- [x] `TreatmentOverlay` HUD widget showing title/dates/status/today's usage progress.
+- [x] `test/treatment_service_test.dart` — fail-open/closed matrix + name-mapping edge cases
+      against the coworker's exact sample payload.
+- [ ] **Not done yet — do this first tomorrow:** real device/emulator verification. Everything
+      above is unit-tested and `flutter analyze`/`build`/`flutter test` clean, but nobody has
+      driven the actual HUD overlay or an actually-filtered game menu on a running app.
+- [!] **Open, unconfirmed:** does the backend derive `patient_usage_time` from the
+      `sync_status` telemetry the app already sends, or does the app need a write-back path
+      that doesn't exist yet? If the progress bar looks frozen relative to real usage, this is
+      the first thing to check with the coworker. (No write-back is assumed/built.)
+- Deferred, tracked as GitHub issues: #30 (`pet_stats_bundle` dual-write bug found along the
+  way), #31 (battery-optimization exemption prompt, closes the harder full-Doze telemetry
+  gap), #32 (revive dead native `MissionManager.kt` scaffold so treatment tracking can survive
+  the app being closed, same way `sync_status` already does — not done this session).
+
+<details>
+<summary>Original plan going into this phase (kept for context, superseded by the above)</summary>
+
 **Decision (owner):** the web platform will expose a JSON that lists the games a user
 (device token) is allowed to play. The app **fetches** that list by device token; we likely
 need an **adapter** to normalize whatever shape the web API returns. Build everything up to
 the network seam so only the real request/parse needs filling in when the web details land.
 
-- [ ] **ADR first:** `docs/adr/NNNN-game-allowlist.md` — data model, source of truth,
-      offline behavior (cache last-known allow-list; fail-open or fail-closed?), refresh
-      cadence, identity = device token.
-- [ ] Define an `AllowedGames` model + `GameAllowlistService` with a clean interface:
-      `Future<Set<GameId> > fetchAllowedGames(String deviceToken)`.
-- [ ] **Adapter seam:** put the real HTTP/ThingsBoard call behind an interface so the parser
-      can be swapped once the web JSON shape is known. Provide a stub/fake returning "all
-      games allowed" so the app works today.
-- [ ] Wire gating into the game launcher (`lib/screens/widgets/menus/game_menu.dart` /
-      `game_screen.dart` / `minigame_screen.dart`): disable/hide games not in the allow-list.
-- [ ] Cache the last-known allow-list in SharedPreferences (JSON bundle, per project
-      persistence convention) so it survives offline/relaunch.
-- [ ] Localize any new UI (e.g. "This game is disabled by your therapist").
-- [ ] Test: unit-test the service + adapter with a fake; verify gating in UI.
+- Define an `AllowedGames` model + `GameAllowlistService` with a clean interface:
+  `Future<Set<GameId>> fetchAllowedGames(String deviceToken)`.
+- Adapter seam behind an interface so the parser can be swapped once the web JSON shape is
+  known.
+- Localize new UI (e.g. "This game is disabled by your therapist").
+- Two cloud hosts, reason for the split unconfirmed at the time.
 
-- [!] **BLOCKED (open question for coworkers):** exact web API — endpoint, auth, and JSON
-      schema for the per-token game list. Likely a ThingsBoard **server/shared attribute**
-      on the device (e.g. `GET /api/v1/{token}/attributes`) rather than the telemetry POST we
-      use now, but **confirm**. Capture the answer in the ADR, then finish the adapter.
-- [!] **Two cloud hosts (likely intentional):** owner's read of the WhatsApp group —
-      `.20` = ThingsBoard (telemetry, matches code default in
-      `lib/services/cloud/cloud_service.dart`), `.19` = the web platform/page. Unconfirmed.
-      So the allow-list fetch may hit **`.19` (web)** or ThingsBoard attributes on **`.20`** —
-      settle this when you get the API details, and don't assume one base URL covers both.
+</details>
 
-**Acceptance:** with the stub, all games show; swapping the stub for the real adapter (once
-web details arrive) gates games by token; allow-list cached offline; ADR written.
+**Acceptance:** ✅ gating works end-to-end against the real endpoint; allow-list cached
+offline; ADR written (0011). ⚠️ Real-hardware verification still outstanding (see above).
+
+**As a bonus/prerequisite this session:** a coworker-reported usage-undercount bug (1hr of
+wear logging as ~15min) got fixed first, since it touched the same cloud-client code this
+phase needed to build on — see `docs/adr/0011-...md`'s "Telemetry envelope" section and
+`docs/telemetria.md` / `docs/en/telemetry.md` for the updated wire format. **Not yet verified
+on real hardware either** — the wakelock fix needs an `adb dumpsys power` check on a device
+under actual screen-off idle (steps are in the ADR/PR notes) before this can be called closed.
 
 ---
 
@@ -247,10 +277,16 @@ steps written; sticky-type swap re-tested.
 
 ## 4. Open questions / blockers (chase these)
 
-- [ ] **Web API for the game allow-list** (Phase 3) — endpoint, auth, JSON schema, keyed by
-      device token. *→ ask coworkers.*
-- [ ] **Cloud host `.19` vs `.20`** — likely `.20` = ThingsBoard, `.19` = web platform (per
-      WhatsApp group, unconfirmed). Confirm which serves the allow-list. *→ ask coworkers.*
+- [x] **Web API for the game allow-list** (Phase 3) — **RESOLVED 2026-07-02.** It's a
+      treatment-record `GET` endpoint, not a bare game list. See `docs/adr/0011-...md`.
+- [x] **Cloud host `.19` vs `.20`** — **RESOLVED 2026-07-02.** `.20` = ThingsBoard telemetry,
+      `.19` = the treatment/allowlist endpoint. Same device-token value for both.
+- [ ] **New, from this session:** does the treatment endpoint's `patient_usage_time` get
+      derived server-side from telemetry, or does the app need to push progress somewhere?
+      No write-back exists/assumed today. *→ ask coworkers.*
+- [ ] **New, from this session:** real-device verification pending for both the wakelock fix
+      (usage-undercount bug) and the treatment/game-allowlist feature — neither has been run
+      on actual hardware yet, only unit-tested + `flutter build` verified.
 
 _(Branch strategy resolved: `main` stable / `dev` nightly / `unstable` experimental sandbox
 — documented in Phase 1.)_

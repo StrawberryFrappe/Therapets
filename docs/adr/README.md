@@ -42,6 +42,7 @@ Numbering is sequential (`0001`, `0002`, …). Filename:
 | [0008](0008-push-only-cloud.md) | Push-only cloud (being revisited for allowlist) | Accepted |
 | [0009](0009-three-branch-release-pipeline.md) | Three-branch release pipeline | Accepted |
 | [0010](0010-corrupted-packet-heuristics.md) | Corrupted-packet rejection heuristics | Accepted |
+| [0011](0011-game-allowlist-treatment-integration.md) | Game-allowlist via treatment-record fetch | Accepted |
 
 > Candidate decisions still needing an ADR are tracked in the project
 > `ROADMAP.md` (docs phase). Add rows here as they are written.

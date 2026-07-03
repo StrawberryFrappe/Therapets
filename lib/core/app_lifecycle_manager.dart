@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../game/missions/mission_service.dart';
 import '../game/pets/pet_stats.dart';
 import '../services/device/device_service.dart';
+import '../services/treatment/treatment_service.dart';
 
 /// Manages the application lifecycle.
 /// Flushes persistent state to disk when the app is paused or detached.
@@ -10,6 +11,7 @@ class AppLifecycleManager extends StatefulWidget {
   final PetStats petStats;
   final MissionService missionService;
   final DeviceService deviceService;
+  final TreatmentService treatmentService;
 
   const AppLifecycleManager({
     super.key,
@@ -17,6 +19,7 @@ class AppLifecycleManager extends StatefulWidget {
     required this.petStats,
     required this.missionService,
     required this.deviceService,
+    required this.treatmentService,
   });
 
   @override
@@ -63,7 +66,8 @@ class _AppLifecycleManagerState extends State<AppLifecycleManager> with WidgetsB
     debugPrint('[LifecycleManager] RESUMED');
     await widget.deviceService.onAppResumed();
     // Re-load stats if needed (Hive might have been updated by background service)
-    // widget.petStats.loadFromHive(); 
+    // widget.petStats.loadFromHive();
+    widget.treatmentService.refresh(); // throttled internally, fire-and-forget
   }
 
   @override

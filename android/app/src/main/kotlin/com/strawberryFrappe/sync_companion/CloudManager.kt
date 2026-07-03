@@ -22,7 +22,6 @@ class CloudManager(private val context: Context) {
 
     fun logSyncStatus(synced: Boolean, avgBpm: Int?, avgSpo2: Int?, avgTemp: Double?) {
         val payload = JSONObject().apply {
-            put("timestamp", System.currentTimeMillis())
             put("synced", synced)
             val vitals = JSONObject()
             avgBpm?.let { if (it > 0) vitals.put("avgBpm", it) }
@@ -33,6 +32,7 @@ class CloudManager(private val context: Context) {
 
         val event = JSONObject().apply {
             put("eventType", "sync_status")
+            put("timestamp", System.currentTimeMillis())
             put("payload", payload)
         }
 
@@ -41,12 +41,12 @@ class CloudManager(private val context: Context) {
 
     fun logMissionCompleted(missionId: String) {
         val payload = JSONObject().apply {
-            put("timestamp", System.currentTimeMillis())
             put("mission_id", missionId)
         }
 
         val event = JSONObject().apply {
             put("eventType", "mission_completed")
+            put("timestamp", System.currentTimeMillis())
             put("payload", payload)
         }
 
@@ -103,11 +103,7 @@ class CloudManager(private val context: Context) {
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
 
-            val payload = JSONObject().apply {
-                put(event.getString("eventType"), event.getJSONObject("payload"))
-            }
-
-            OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+            OutputStreamWriter(conn.outputStream).use { it.write(event.toString()) }
 
             val responseCode = conn.responseCode
             return responseCode in 200..299

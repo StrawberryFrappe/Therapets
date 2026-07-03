@@ -10,6 +10,7 @@ import '../game/missions/mission_service.dart';
 import '../game/missions/mission.dart';
 import '../game/pets/pet_stats.dart';
 import '../services/cloud/cloud_service.dart';
+import '../services/treatment/treatment_service.dart';
 import 'package:provider/provider.dart';
 
 import 'settings/dev_tools_settings.dart';
@@ -333,6 +334,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       builder: (context) => GameMenu(
+        enabledGameIds: context.read<TreatmentService>().effectiveEnabledGameIds,
         onClose: () => Navigator.of(context).pop(),
         onPlay: (gameId) {
           Navigator.of(context).pop(); // Close menu

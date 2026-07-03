@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+- **Treatment-driven game allowlist**: healthcare professionals can now restrict which
+  minigames a patient sees via a treatment/prescription record fetched from a new backend
+  endpoint. Fail-open on technical failures, fail-closed when a treatment is confirmed
+  inactive. See `docs/adr/0011-game-allowlist-treatment-integration.md`.
+- **Cloud hardening**: fixed a usage-undercount bug (BLE foreground service now holds a
+  wakelock while connected so the per-minute sync tally survives screen-off idle). Unified
+  the native/Dart telemetry envelope shape (event types themselves were not merged). Removed
+  the dead `flutter_foreground_task` plugin and a redundant Dart-side usage tracker.
 - **Documentation Overhaul**: Rebuilt the GitHub Pages manual on the Just the Docs
   theme (dark mode, search, auto sidebar). Added a complete bilingual (ES/EN) manual
   covering both end users and developers: install, BLE pairing, pet care, store,

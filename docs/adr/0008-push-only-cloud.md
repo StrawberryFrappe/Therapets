@@ -1,6 +1,6 @@
 # 0008. Push-only cloud (telemetry out, nothing in)
 
-- **Status:** Accepted — being revisited (see below)
+- **Status:** Accepted — revised by [[ADR-0011]] (adds one read path for the game-allowlist; telemetry itself stays push-only)
 - **Date:** 2026-05-20
 - **Deciders:** Project owner (@StrawberryFrappe)
 
@@ -35,6 +35,10 @@ clinician).
   to the owner (possibly organisational — a Conway's-law artifact). Confirm which
   host the allowlist read should target before building against it.
 
+> **See [[ADR-0011]] for the resolution:** the allowlist read landed on `.19`
+> using the same device-token value as ThingsBoard's `.20`. This ADR's original
+> content is left as-written above per the immutable-ADR convention.
+
 ## Alternatives considered
 
 - **Bidirectional sync from the start** — rejected as unnecessary complexity for
@@ -43,4 +47,5 @@ clinician).
 ## References
 
 - `lib/services/cloud/cloud_service.dart` (telemetry POST, no fetch path)
-- Related: [[ADR-0007]]; allowlist work in `ROADMAP.md`
+- Related: [[ADR-0007]]; [[ADR-0011]] (the allowlist/treatment read path this
+  ADR anticipated); `ROADMAP.md` Phase 3
