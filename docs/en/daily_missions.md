@@ -1,22 +1,42 @@
 ---
-title: "Daily Missions"
+title: Daily Missions
+parent: User Guide
 lang: en
+nav_order: 6
+description: "The three daily missions, their rewards, and the midnight reset."
 ---
 
 # Daily Missions
+{: .no_toc }
 
-Your real-world healthy habits translate directly into progress inside Therapets through daily missions.
+1. TOC
+{:toc}
 
-## How do they work?
+Every day **3 missions** are generated. Completing them grants **gold** (for clothing)
+and a bit of **happiness**. They **reset** when the day changes (at midnight, local time).
 
-While you have your device connected and are performing your tasks or staying nearby (detected by the presence sensor), the system accumulates time in the background.
+![Daily missions]({{ '/assets/images/screenshots/06_missions.png' | relative_url }})
+*The day's three missions with their progress and gold reward.*
 
-1. **Time Accumulation:** Every minute you spend active is recorded.
-2. **Rewards:** Upon completing time milestones (e.g., 30 minutes of activity), the mission is marked as completed.
-3. **Silver Coins:** Completing missions and playing minigames rewards you with Silver Coins, which you will use to buy food for your pet.
+## The three missions
 
-![Daily Missions List](/assets/images/daily_missions_en.png)
+| Mission | Objective | Reward |
+|---------|-----------|:------:|
+| **Sync Master** | Be synced for **120 minutes** in a day | 🪙 50 gold + happiness |
+| **Game Time** | Play **3** minigames | 🪙 30 gold + happiness |
+| **Yummy Time** | Feed Bob **3** times | 🪙 20 gold + happiness |
 
-## Special Cases (The 15-second cycle)
+- **Sync Master** advances on its own while you are *Synced* — even with the app
+  in the background (progress is recovered when you reopen).
+- **Game Time** counts every round of any minigame.
+- **Yummy Time** counts each time you feed Bob.
 
-If your smart device's sensor stops detecting you for a few seconds (due to the hardware's sleep cycle), the system gives you a 15-second "grace window." This means you **will not lose your progress** due to small hardware reading gaps.
+## Daily reset
+
+When you open the app on a new day, the previous day's missions are replaced by
+a fresh set. Incomplete progress is lost; gold already earned is kept.
+
+> Mission progress is saved resiliently (Hive + SharedPreferences backup) to
+> survive system kills. Details in
+> [Data Model](data_model.html).
+{: .note }

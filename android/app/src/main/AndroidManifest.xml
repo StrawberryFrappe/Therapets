@@ -11,8 +11,9 @@
     <!-- Required for running a foreground service to keep BLE active while app is backgrounded -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- For Android target SDKs that require specific foreground service types -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Keeps the CPU awake while actively synced with the wearable, so the per-minute sync tally doesn't stall on screen-off idle -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Android 13+ requires runtime notification permission to post notifications -->
@@ -52,8 +53,6 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- Foreground service required by flutter_foreground_task plugin. Keeps a persistent notification while service runs. -->
-        <service android:name="com.pravera.flutter_foreground_task.service.ForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <!-- Native BLE foreground service implemented in Kotlin -->
         <service android:name=".BleForegroundService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
 

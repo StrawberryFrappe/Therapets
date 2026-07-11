@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.Context
 import android.os.IBinder
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.app.NotificationManager
 import android.app.NotificationChannel
@@ -67,6 +68,8 @@ class BleForegroundService : Service() {
     private var syncStateRunnable: Runnable? = null
     private lateinit var bioProcessor: BioSignalProcessor
     private lateinit var cloudManager: CloudManager
+    // Held only while GATT is connected, so the 1Hz sync tally doesn't stall on screen-off idle.
+    private var wakeLock: PowerManager.WakeLock? = null
 
     // Tallies
     private var syncedSecondsThisMinute = 0
@@ -86,6 +89,10 @@ class BleForegroundService : Service() {
         // the persisted flag when a real connection/disconnection occurs.
         bioProcessor = BioSignalProcessor(this)
         cloudManager = CloudManager(this)
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Therapets:BleSyncWakeLock").apply {
+            setReferenceCounted(false)
+        }
         // If saved device id exists, attempt reconnect
         val did = prefs?.getString(PREF_SAVED_ID, null)
         if (did != null) {
@@ -169,6 +176,7 @@ class BleForegroundService : Service() {
         syncStateRunnable?.let { handler.removeCallbacks(it) }
         syncStateRunnable = null
         disconnectGatt()
+        try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (e: Exception) {}
         super.onDestroy()
     }
 
@@ -411,6 +419,7 @@ class BleForegroundService : Service() {
     }
 
     private fun disconnectGatt() {
+        try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (e: Exception) {}
         try {
             gatt?.disconnect()
             gatt?.close()
@@ -488,6 +497,7 @@ class BleForegroundService : Service() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 reconnectAttempts = 0
+                if (wakeLock?.isHeld != true) wakeLock?.acquire()
                 // persist connected state
                 try { prefs?.edit()?.putBoolean(PREF_CONNECTED, true)?.apply() } catch (e: Exception) {}
                 sendStatusBroadcast(true, bioProcessor.humanDetected)
@@ -498,6 +508,7 @@ class BleForegroundService : Service() {
                 } catch (e: Exception) {}
                 g.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (e: Exception) {}
                 sendStatusBroadcast(false, false)
                 try {
                     val nm = getSystemService(NotificationManager::class.java)

@@ -1,23 +1,42 @@
 ---
-title: "Actualizar la App"
+title: Actualizar la App
+parent: Guía del Usuario
 lang: es
+nav_order: 10
+description: "Canales de actualización y proceso de actualización dentro de la app."
 ---
 
-# Actualización de la App
+# Actualizar la App
+{: .no_toc }
 
-Therapets cuenta con un sistema integrado para mantener tu aplicación siempre en la última versión sin depender de tiendas externas.
+1. TOC
+{:toc}
 
-## Actualización Automática
+## Canales
 
-1. Cuando hay una nueva versión (publicada en nuestro GitHub), la aplicación la detecta automáticamente.
-2. Aparecerá un icono emergente en la pantalla principal.
-3. Toca el icono: la app descargará la actualización y lanzará el instalador nativo de Android.
+Therapets se distribuye en tres canales (ver [Instalación](instalacion.html)):
 
-![Aviso de Actualización](/assets/images/app_update_es.png)
+- **Stable** — versiones de producción (`vX.Y.Z`).
+- **Nightly** — compilaciones de la rama `dev` (`vX.Y.Z-nightly.N`).
+- **Unstable** — compilaciones experimentales (`vX.Y.Z-unstable.N`).
 
-## Canales de Lanzamiento
+## Actualización dentro de la app
 
-Puedes elegir qué tipo de actualizaciones recibir yendo a **Ajustes > Ajustes Avanzados**:
-- **Main (Principal):** Versiones estables y recomendadas (Por defecto).
-- **Dev (Nightly):** Construcciones diarias, incluyen lo último pero pueden tener errores.
-- **Unstable (Inestable):** Versiones experimentales.
+La app comprueba si hay una versión más reciente en las *Releases* de GitHub.
+Cuando hay una disponible, aparece un **icono de actualización** en el HUD.
+
+1. Pulsa el icono de actualización.
+2. La app descarga el APK de la nueva versión.
+3. Se lanza el instalador de Android (gracias al permiso
+   `REQUEST_INSTALL_PACKAGES`).
+4. Confirma para instalar sobre la versión actual.
+
+> Tus datos (mascota, monedas, misiones) se conservan entre actualizaciones: se
+> guardan en almacenamiento local con migración automática de formatos antiguos.
+{: .note }
+
+## Actualización manual
+
+También puedes descargar el APK más reciente directamente desde las
+[Releases de GitHub](https://github.com/StrawberryFrappe/Therapets/releases) e
+instalarlo encima.

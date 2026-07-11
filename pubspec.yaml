@@ -1,7 +1,7 @@
 name: Therapets
 description: Virtual pet therapy app for orthotic devices.
 publish_to: 'none'
-version: 1.0.4+29
+version: 1.1.0+30
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -15,7 +15,6 @@ dependencies:
   cupertino_icons: ^1.0.2
   flutter_blue_plus: ^1.4.0
   shared_preferences: ^2.1.0
-  flutter_foreground_task: ^9.1.0
   flame: ^1.21.0
   audioplayers: ^6.0.0
   wakelock_plus: ^1.2.8

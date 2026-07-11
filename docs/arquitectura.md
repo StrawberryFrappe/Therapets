@@ -1,54 +1,101 @@
 ---
-title: "Arquitectura y Sync"
+title: Arquitectura
+parent: Para Desarrolladores
 lang: es
+nav_order: 1
+description: "Visión general de capas, inyección de dependencias, ciclo de vida y agregación del estado de sync."
 ---
 
-# Arquitectura y Sincronización (Sync State Vision)
+# Arquitectura
+{: .no_toc }
 
-Esta sección documenta la auditoría de Abril 2026 sobre el "Sync State".
+1. TOC
+{:toc}
 
-El "Sync State" dicta la telemetría de la nube, la visualización de la UI y las misiones diarias. Actúa como puente entre las limitaciones del hardware (ciclos de sueño de los sensores IoT de 10s) y las restricciones del OS móvil.
+Therapets es una app **Flutter** con una capa nativa **Android (Kotlin)** para el
+trabajo en segundo plano. El flujo es: **Bluetooth → abstracción de dispositivo →
+lógica de juego → UI**, con una capa transversal de **persistencia y nube**.
 
-## Casos de Uso del Sync
-
-1. **Lecturas Deficientes / Ciclo de Sueño (10s)**
-   - *Trigger:* BLE conectado, `humanDetected` pasa a false.
-   - *Acción:* Ventana de gracia de 15s. Se mantiene en el historial el *último estado registrado*.
-   - *Resultado:* Evita desconexiones por ciclos de sueño del hardware.
-2. **Dispositivo en Reposo (Sin Humano)**
-   - *Trigger:* Expira la ventana de gracia.
-   - *Acción:* Se empuja `false` al historial. Se detiene el conteo de misiones y los logs a la nube.
-3. **Desconexión del Dispositivo (Corte BLE)**
-   - *Trigger:* Pérdida de conexión.
-   - *Acción:* La UI se congela hasta por 30s ("esperando"). Si se reconecta, la UI reanuda. Si no, se limpia la historia de la UI.
-   - *Aclaración:* El historial de la nube NO se congela, se registra como `false` (0s sincronizados) sin falsear datos.
-
-## Mandato Arquitectónico
-
-- **Native Foreground Service:** El servicio de Android en primer plano (`BleForegroundService`) es la fuente principal de la verdad.
-- **Flutter Lifecycle:** El método `DeviceService.onAppResumed()` de Flutter NUNCA debe borrar el estado, debe leer el estado canónico desde la parte Nativa.
-- **Nube:** Los envíos (Thingsboard HTTP) y conteos de misión se ejecutan en Nativo para sobrevivir la suspensión del motor de Flutter.
+## Capas
 
 ```mermaid
-flowchart TD
-    subgraph IoT_Hardware
-        S[Sensor 10s Sleep Cycle]
+graph TD
+    subgraph Nativo Android Kotlin
+      BFS[BleForegroundService] --> MM[MissionManager]
+      BFS --> CM[CloudManager]
+      BR[BootReceiver] --> BFS
     end
-    
-    subgraph Native_Android
-        FS[BleForegroundService]
-        FS -- Source of Truth --> FS
+    subgraph Servicios Dart
+      BT[BluetoothService] -->|incomingRaw$| DS[DeviceService]
+      DS -->|telemetry$ / events$| GAME
+      CS[CloudService]
+      NS[PetNotificationService]
     end
-    
-    subgraph Flutter_Engine
-        DS[DeviceService]
+    subgraph Juego Flame
+      GAME[VirtualPetGame] --> PET[Pet / PetStats]
+      GAME --> MINI[Minijuegos]
     end
-    
-    subgraph Cloud
-        TB[Thingsboard HTTP]
-    end
-    
-    S -->|BLE| FS
-    FS -->|onAppResumed| DS
-    FS -->|Background Push| TB
+    UI[Screens / HUD] --> GAME
+    BFS -. MethodChannel .- BT
+    DS --> CS
+    MS[MissionService] --> CS
 ```
+
+| Capa | Componentes clave | Ubicación |
+|------|-------------------|-----------|
+| Entrada | `main.dart`, `BootstrapWrapper`, `TherapetsApp` | `lib/main.dart` |
+| Bootstrap | `AppBootstrapper`, `AppLifecycleManager` | `lib/core/` |
+| Dispositivo (BLE) | `BluetoothService`, `DeviceService`, procesadores de señal | `lib/services/device/` |
+| Nube | `CloudService`, `CloudEvent`, `EventQueue` | `lib/services/cloud/` |
+| Juego | `VirtualPetGame`, `Pet`, `PetStats`, minijuegos | `lib/game/` |
+| UI | `GameScreen`, HUD, menús, ajustes | `lib/screens/` |
+| Nativo | `BleForegroundService`, `MissionManager`, `CloudManager`, `BootReceiver`, `MainActivity` | `android/app/src/main/kotlin/com/strawberryFrappe/sync_companion/` |
+
+## Inyección de dependencias
+
+Se usa **`provider`**. Los servicios se construyen e inicializan en
+`AppBootstrapper` (`lib/core/app_bootstrapper.dart`) y se inyectan en el árbol:
+`CloudService`, `DeviceService`, `MissionService`, `PetStats`,
+`PetNotificationService` y `LocaleService` (este último como `ChangeNotifierProvider`).
+
+## Ciclo de vida
+
+`AppLifecycleManager` (`lib/core/app_lifecycle_manager.dart`) engancha el ciclo de
+vida de Flutter:
+
+- **pause/resume:** guarda estadísticas; al volver, `DeviceService.onAppResumed()`
+  re-engancha el `EventChannel` nativo y pide el estado canónico al servicio.
+- **Hidratación en segundo plano:** `PetStats.applyBackgroundUpdates()` y
+  `MissionService.rehydrateBackgroundProgress()` recalculan el tiempo transcurrido
+  mientras la app estuvo cerrada, usando el reloj y el último timestamp guardado.
+
+## Estado de sincronización (display status)
+
+`DeviceService` (`lib/services/device/device_service.dart`) expone `displayStatus$`
+con cuatro estados (`synced`, `connected`, `waiting`, `searching`). La lógica vive
+en `DeviceStatusAggregator` (`device_status_aggregator.dart`), que combina:
+
+- estado de conexión nativo (sobrevive reinicios de UI),
+- **liveness**: telemetría reciente (< 3 s),
+- detección de humano (según el procesador del tipo de sensor),
+- una **ventana de gracia** para no romper *synced* por parpadeos breves,
+- si hay un minijuego en curso.
+
+```mermaid
+stateDiagram-v2
+    searching --> waiting: hay ID guardado
+    waiting --> connected: conectado
+    connected --> synced: humano detectado
+    synced --> connected: sin humano (tras gracia)
+    connected --> waiting: desconexión
+```
+
+## Detección del tipo de sensor
+
+Es **pegajosa** (*sticky*): el primer paquete fija el tipo y no cambia hasta
+desconectar (`DeviceService.init()`):
+
+- 16 bytes → `DeviceType.max30100`
+- 14 bytes → `DeviceType.gy906`
+
+Ver [Capa BLE y Protocolo](ble_protocolo.html) para el formato de paquetes.

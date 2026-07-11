@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -102,38 +101,23 @@ class ForegroundNotificationUpdater {
     _pending = null;
     _lastSent = text;
     try {
-      if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: updating service text: $text');
-      // Prefer native service notification update when available
-      try {
-        final nativeRunning = await _platform.invokeMethod('isNativeServiceRunning');
-        if (nativeRunning == true) {
-          await _platform.invokeMethod('updateNotification', {'text': text});
-          return;
-        }
-      } catch (_) {}
-      await FlutterForegroundTask.updateService(notificationText: text);
-    } catch (e) {
-      if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: updateService failed: $e');
-      // Fallback to platform method which can try to update native notification
-      try {
+      final nativeRunning = await _platform.invokeMethod('isNativeServiceRunning');
+      if (nativeRunning == true) {
         await _platform.invokeMethod('updateNotification', {'text': text});
-      } catch (e2) {
-        if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: native fallback failed: $e2');
+      } else if (BluetoothService.BLE_DEBUG) {
+        print('ForegroundNotification: native service not running, skipping update');
       }
+    } catch (e) {
+      if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: updateNotification failed: $e');
     }
   }
 
   Future<void> _removeNotificationIfNeeded() async {
     try {
       if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: removing service/notification');
-      await FlutterForegroundTask.stopService();
+      await _platform.invokeMethod('stopNativeService');
     } catch (e) {
-      if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: removeService failed: $e');
-      try {
-        await _platform.invokeMethod('stopNativeService');
-      } catch (e2) {
-        if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: stopNativeService fallback failed: $e2');
-      }
+      if (BluetoothService.BLE_DEBUG) print('ForegroundNotification: stopNativeService failed: $e');
     }
   }
 }

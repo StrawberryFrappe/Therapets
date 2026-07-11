@@ -3,6 +3,8 @@ import 'dart:collection';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 
+import 'presence_profile.dart';
+
 /// Processed bio-sensor data with calculated vitals.
 class BioData {
   /// Raw infrared value from sensor (null if sensor error or not present)
@@ -99,6 +101,13 @@ class FilterBuLp1 {
 /// Based on the reference implementation from Arduino-MAX30100 library.
 /// Uses state machine for beat detection and log-ratio for SpO2.
 class BioSignalProcessor {
+  /// Duty-cycle tuning profile. Defaults to always-on (strict).
+  PresenceProfile _profile;
+  set profile(PresenceProfile p) => _profile = p;
+
+  BioSignalProcessor({PresenceProfile? profile})
+      : _profile = profile ?? const PresenceProfile.alwaysOn();
+
   // Debug mode - uses Flutter's kDebugMode to disable logging in release builds
   static const bool _debugMode = kDebugMode;
   int _debugLogCounter = 0;
@@ -204,13 +213,13 @@ class BioSignalProcessor {
   
   /// Check if last valid reading is still fresh (within timeout period).
   /// Returns the last valid reading if available and fresh, otherwise null.
-  BioData? getFreshValidReading([Duration timeout = const Duration(seconds: 60)]) {
+  BioData? getFreshValidReading([Duration? timeout]) {
     if (_lastValidBioData == null || _lastValidBioDataTimestamp == null) {
       return null;
     }
-    
+
     final elapsedTime = DateTime.now().difference(_lastValidBioDataTimestamp!);
-    if (elapsedTime > timeout) {
+    if (elapsedTime > (timeout ?? _profile.freshnessTimeout)) {
       return null;
     }
     
@@ -249,6 +258,16 @@ class BioSignalProcessor {
     _bioDataController.add(_latestBioData);
   }
   
+  /// On a zero/error frame: in strict (always-on) mode this is a real absence,
+  /// so drop the cached reading to stop it bridging stale data. In lenient mode
+  /// it's a benign sleep blackout — keep the cache so the gap is bridged.
+  void _onZeroOrErrorFrame() {
+    if (_profile.zeroMeansAbsent) {
+      _lastValidBioData = null;
+      _lastValidBioDataTimestamp = null;
+    }
+  }
+
   int? _previousRawIr;
   int _consecutiveDroppedSpikes = 0;
 
@@ -267,6 +286,7 @@ class BioSignalProcessor {
     _previousRawIr = rawIr;
     // Handle sensor error/disconnected state (65535 = 0xFFFF = sensor error)
     if (rawIr == 65535 || rawRed == 65535) {
+      _onZeroOrErrorFrame();
       _latestBioData = const BioData(
         sensorConnected: false,
         humanDetected: false,
@@ -274,9 +294,10 @@ class BioSignalProcessor {
       _bioDataController.add(_latestBioData);
       return;
     }
-    
+
     // Handle sensor initializing (both zero)
     if (rawIr == 0 && rawRed == 0) {
+      _onZeroOrErrorFrame();
       _latestBioData = const BioData(
         rawIr: 0,
         rawRed: 0,
