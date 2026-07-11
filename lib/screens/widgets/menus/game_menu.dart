@@ -22,11 +22,14 @@ class GameMenuItem {
 class GameMenu extends StatelessWidget {
   final VoidCallback onClose;
   final Function(String gameId) onPlay;
+  // null = no filter (show every game). Non-null = only these ids render.
+  final Set<String>? enabledGameIds;
 
   const GameMenu({
     super.key,
     required this.onClose,
     required this.onPlay,
+    this.enabledGameIds,
   });
 
   static const List<GameMenuItem> games = [
@@ -62,6 +65,10 @@ class GameMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visibleGames = enabledGameIds == null
+        ? games
+        : games.where((g) => enabledGameIds!.contains(g.id)).toList();
+
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.zero,
@@ -111,9 +118,9 @@ class GameMenu extends StatelessWidget {
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                 ),
-                itemCount: games.length,
+                itemCount: visibleGames.length,
                 itemBuilder: (context, index) {
-                  final game = games[index];
+                  final game = visibleGames[index];
                   return _buildGameCard(game);
                 },
               ),

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'presence_profile.dart';
+
 /// Processed temperature data from GY906 sensor.
 class TemperatureData {
   /// Raw temperature value from sensor (null if sensor error or not present)
@@ -36,6 +38,13 @@ class TemperatureData {
 /// of 29.7°C to 41°C. This is lower than core body temperature (35.9°C-41°C)
 /// because skin surface temperature on the forearm is typically 5-8°C cooler.
 class TemperatureSignalProcessor {
+  /// Duty-cycle tuning profile. Defaults to always-on (strict).
+  PresenceProfile _profile;
+  set profile(PresenceProfile p) => _profile = p;
+
+  TemperatureSignalProcessor({PresenceProfile? profile})
+      : _profile = profile ?? const PresenceProfile.alwaysOn();
+
   // Human detection thresholds (forearm skin surface temperature range)
   static const double _minHumanTemp = 29.7;
   static const double _maxHumanTemp = 41.0;
@@ -69,13 +78,13 @@ class TemperatureSignalProcessor {
   
   /// Check if last valid reading is still fresh (within timeout period).
   /// Returns the last valid reading if available and fresh, otherwise null.
-  TemperatureData? getFreshValidReading([Duration timeout = const Duration(seconds: 60)]) {
+  TemperatureData? getFreshValidReading([Duration? timeout]) {
     if (_lastValidData == null || _lastValidDataTimestamp == null) {
       return null;
     }
-    
+
     final elapsedTime = DateTime.now().difference(_lastValidDataTimestamp!);
-    if (elapsedTime > timeout) {
+    if (elapsedTime > (timeout ?? _profile.freshnessTimeout)) {
       return null;
     }
     
@@ -91,6 +100,12 @@ class TemperatureSignalProcessor {
     // Handle sensor error: rawTemp of 0 converts to -273.15°C (absolute zero),
     // which indicates the sensor is disconnected or malfunctioning.
     if (rawTemp == 0) {
+      // Strict (always-on): real disconnect, drop cache so stale data can't
+      // bridge. Lenient: benign sleep blackout, keep cache to bridge the gap.
+      if (_profile.zeroMeansAbsent) {
+        _lastValidData = null;
+        _lastValidDataTimestamp = null;
+      }
       _latestData = const TemperatureData(
         sensorConnected: false,
         humanDetected: false,

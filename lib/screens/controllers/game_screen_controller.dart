@@ -16,9 +16,7 @@ class GameScreenController extends ChangeNotifier {
   final PetNotificationService notificationService;
   
   bool _isPaused = false;
-  int _backgroundSyncSeconds = 0;
-  DateTime? _backgroundSyncStartTime;
-  
+
   Timer? _autoSaveTimer;
   Timer? _uiUpdateTimer;
   Timer? _backgroundTicker;
@@ -58,13 +56,6 @@ class GameScreenController extends ChangeNotifier {
       if (_isPaused && game.isReady) {
         final isSynced = connectionStatus == DeviceDisplayStatus.synced;
         game.currentPet.stats.update(1.0, isDeviceSynced: isSynced);
-        
-        if (isSynced) {
-          _backgroundSyncStartTime ??= DateTime.now();
-          _backgroundSyncSeconds++;
-        } else if (_backgroundSyncSeconds > 0) {
-          _flushBackgroundSession();
-        }
       }
     });
 
@@ -108,17 +99,6 @@ class GameScreenController extends ChangeNotifier {
     };
   }
 
-  void _flushBackgroundSession() {
-    if (_backgroundSyncSeconds > 0 && _backgroundSyncStartTime != null) {
-      cloudService.logSyncSession(
-        duration: Duration(seconds: _backgroundSyncSeconds),
-        startTime: _backgroundSyncStartTime!,
-      );
-      _backgroundSyncSeconds = 0;
-      _backgroundSyncStartTime = null;
-    }
-  }
-
   Future<void> saveStats() async {
     try {
       await game.savePetStats();
@@ -136,7 +116,6 @@ class GameScreenController extends ChangeNotifier {
         break;
       case AppLifecycleState.resumed:
         _isPaused = false;
-        _flushBackgroundSession();
         // AppLifecycleManager already calls deviceService.onAppResumed()
         break;
       case AppLifecycleState.detached:

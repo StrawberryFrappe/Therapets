@@ -5,6 +5,7 @@ import 'package:Therapets/game/pets/pet_stats.dart';
 import 'package:Therapets/game/missions/mission_service.dart';
 import 'package:Therapets/services/device/device_service.dart';
 import 'package:Therapets/services/cloud/cloud_service.dart';
+import 'package:Therapets/services/treatment/treatment_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -18,6 +19,7 @@ void main() {
       final deviceService = DeviceService();
       final cloudService = CloudService();
       final missionService = MissionService(cloudService: cloudService);
+      final treatmentService = TreatmentService();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -25,6 +27,7 @@ void main() {
             petStats: petStats,
             deviceService: deviceService,
             missionService: missionService,
+            treatmentService: treatmentService,
             child: const Scaffold(
               body: Text('Test App'),
             ),

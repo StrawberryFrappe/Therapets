@@ -27,7 +27,7 @@ void main() {
       
       processor.preSeed(75, 98);
       
-      // Should return reading (just created, well within 60 second timeout)
+      // Should return reading (just created, well within the freshness timeout)
       final freshReading = processor.getFreshValidReading();
       expect(freshReading, isNotNull);
       expect(freshReading!.bpm, 75);

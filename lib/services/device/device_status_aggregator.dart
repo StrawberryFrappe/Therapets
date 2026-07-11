@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'device_service.dart';
+import 'presence_profile.dart';
 
 /// Aggregates raw device signals into high-level display status.
 /// Handles grace periods, debouncing, and human detection history.
@@ -12,9 +13,11 @@ class DeviceStatusAggregator {
   final bool Function() _isMinigameRunningProvider;
   final bool Function() _hasRecentTelemetryProvider;
 
-  // Configuration
-  static const Duration _syncGracePeriod = Duration(seconds: 15);
-  static const int _noHumanDebounceThreshold = 15;
+  // Configuration — duty-cycle tuning. Defaults to always-on (strict).
+  PresenceProfile _profile;
+  set profile(PresenceProfile p) => _profile = p;
+  Duration get _syncGracePeriod => _profile.graceWindow;
+  int get _noHumanDebounceThreshold => _profile.noHumanDebounce;
 
   // State
   Timer? _syncGraceTimer;
@@ -35,11 +38,13 @@ class DeviceStatusAggregator {
     required bool Function() isHumanDetectedProvider,
     required bool Function() isMinigameRunningProvider,
     required bool Function() hasRecentTelemetryProvider,
+    PresenceProfile? profile,
   })  : _baseStatusProvider = baseStatusProvider,
         _staleStatusProvider = staleStatusProvider,
         _isHumanDetectedProvider = isHumanDetectedProvider,
         _isMinigameRunningProvider = isMinigameRunningProvider,
-        _hasRecentTelemetryProvider = hasRecentTelemetryProvider {
+        _hasRecentTelemetryProvider = hasRecentTelemetryProvider,
+        _profile = profile ?? const PresenceProfile.alwaysOn() {
     _startHistoryTimer();
   }
 
@@ -89,10 +94,18 @@ class DeviceStatusAggregator {
     final isDebouncing = _wasHumanDetected && !_inSyncGracePeriod && _consecutiveNoHumanSamples < _noHumanDebounceThreshold;
     final humanDetected = humanDetectedReal || isDebouncing;
 
-    int activeSeconds = _humanDetectionHistory.where((detected) => detected).length;
-    int windowSize = _humanDetectionHistory.length;
-    int requiredSeconds = windowSize > 0 ? (windowSize * 0.33).round() : 0;
-    bool barrageMet = activeSeconds >= requiredSeconds;
+    // History "barrage" vote bridges duty-cycle blackouts (lenient). When the
+    // profile disables it (always-on/strict), key sync off the live reading —
+    // the history would otherwise stay 100% true even when the device is off-body.
+    bool barrageMet;
+    if (_profile.barrageRatio == null) {
+      barrageMet = true;
+    } else {
+      final activeSeconds = _humanDetectionHistory.where((detected) => detected).length;
+      final windowSize = _humanDetectionHistory.length;
+      final requiredSeconds = windowSize > 0 ? (windowSize * _profile.barrageRatio!).round() : 0;
+      barrageMet = activeSeconds >= requiredSeconds;
+    }
 
     if (_isMinigameRunningProvider() || (barrageMet && (humanDetected || (_inSyncGracePeriod && _wasHumanDetected)))) {
       return DeviceDisplayStatus.synced;

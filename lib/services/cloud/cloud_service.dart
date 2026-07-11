@@ -88,7 +88,7 @@ class CloudService {
   }
 
   /// Log an event to be sent to the cloud
-  Future<void> logEvent(String eventType, Map<String, dynamic> payload) async {
+  Future<void> logEvent(String eventType, Map<String, dynamic> payload, {DateTime? timestamp}) async {
     // Ignore if not configured, but log for debugging
     if (!_isConfigured) {
       print('[CloudService] Dropping event "$eventType": cloud service not configured');
@@ -97,7 +97,7 @@ class CloudService {
 
     final event = CloudEvent(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
-      timestamp: DateTime.now(),
+      timestamp: timestamp ?? DateTime.now(),
       eventType: eventType,
       payload: payload,
     );
@@ -110,17 +110,6 @@ class CloudService {
     if (hasConnection) {
       flushQueue();
     }
-  }
-
-  /// Convenience methods for common event types
-  Future<void> logSyncSession({
-    required Duration duration,
-    required DateTime startTime,
-  }) async {
-    await logEvent('sync_session', {
-      'duration_seconds': duration.inSeconds,
-      'start_time': startTime.toIso8601String(),
-    });
   }
 
   /// Report sync status at minute boundary (new telemetry format)
@@ -146,12 +135,11 @@ class CloudService {
     if (avgTemp != null) {
       vitals['avgTemp'] = (avgTemp * 10).round() / 10;
     }
-    
+
     await logEvent('sync_status', {
-      'timestamp': timestamp.toIso8601String(),
       'synced': synced,
-      'vitals': vitals,
-    });
+      if (vitals.isNotEmpty) 'vitals': vitals,
+    }, timestamp: timestamp);
   }
 
   /// Report mission completion
@@ -160,9 +148,8 @@ class CloudService {
     required String missionId,
   }) async {
     await logEvent('mission_completed', {
-      'timestamp': timestamp.toIso8601String(),
       'mission_id': missionId,
-    });
+    }, timestamp: timestamp);
   }
 
   Future<void> logMinigamePlayed({
@@ -218,21 +205,12 @@ class CloudService {
     if (!_isConfigured) return false;
     
     try {
-      // ThingsBoard telemetry API format
       final url = Uri.parse('$_baseUrl/api/v1/$_deviceToken/telemetry');
-      final eventData = {
-        'event_type': event.eventType,
-        ...event.payload,
-      };
-      
-      // Use 'mission' key for mission events, 'telemetry' for others
-      final key = event.eventType == 'mission_completed' ? 'mission' : 'telemetry';
-      
+
       final body = jsonEncode({
-        'ts': event.timestamp.millisecondsSinceEpoch,
-        'values': {
-          key: jsonEncode(eventData),
-        },
+        'eventType': event.eventType,
+        'timestamp': event.timestamp.millisecondsSinceEpoch,
+        'payload': event.payload,
       });
 
       final response = await http

@@ -1,22 +1,42 @@
 ---
-title: "Misiones Diarias"
+title: Misiones Diarias
+parent: Guía del Usuario
 lang: es
+nav_order: 6
+description: "Las tres misiones diarias, sus recompensas y el reinicio a medianoche."
 ---
 
 # Misiones Diarias
+{: .no_toc }
 
-Tus hábitos saludables en el mundo real se traducen directamente en progreso dentro de Therapets a través de misiones diarias.
+1. TOC
+{:toc}
 
-## ¿Cómo funcionan?
+Cada día se generan **3 misiones**. Completarlas da **oro** (para ropa) y un poco
+de **felicidad**. Se **reinician** cuando cambia el día (a medianoche, hora local).
 
-Mientras tienes tu dispositivo conectado y estás realizando tus tareas o estando cerca (detectado por el sensor de presencia), el sistema acumula tiempo en segundo plano.
+![Misiones diarias]({{ '/assets/images/screenshots/06_missions.png' | relative_url }})
+*Las tres misiones del día con su progreso y recompensa en oro.*
 
-1. **Acumulación de Tiempo:** Cada minuto que pasas activo se registra.
-2. **Recompensas:** Al completar los hitos de tiempo (por ejemplo, 30 minutos de actividad), se marca la misión como completada.
-3. **Monedas de Plata (Silver Coins):** Completar misiones y jugar minijuegos te recompensa con Monedas de Plata, las cuales usarás para comprar comida para tu mascota.
+## Las tres misiones
 
-![Lista de Misiones Diarias](/assets/images/daily_missions_es.png)
+| Misión | Objetivo | Recompensa |
+|--------|----------|:----------:|
+| **Sync Master** | Estar sincronizado **120 minutos** en el día | 🪙 50 oro + felicidad |
+| **Game Time** | Jugar **3** minijuegos | 🪙 30 oro + felicidad |
+| **Yummy Time** | Alimentar a Bob **3** veces | 🪙 20 oro + felicidad |
 
-## Casos Especiales (El ciclo de 15 segundos)
+- **Sync Master** avanza solo mientras estás *Sincronizado* — incluso con la app
+  en segundo plano (el progreso se recupera al volver a abrir).
+- **Game Time** cuenta cada partida de cualquier minijuego.
+- **Yummy Time** cuenta cada vez que alimentas a Bob.
 
-Si el sensor de tu dispositivo inteligente deja de detectarte por unos segundos (debido al ciclo de sueño del hardware), el sistema te da una "ventana de gracia" de 15 segundos. Esto significa que **no perderás tu progreso** por pequeños fallos de lectura del hardware.
+## Reinicio diario
+
+Al abrir la app en un día nuevo, las misiones del día anterior se reemplazan por
+un set fresco. El progreso no completado se pierde; el oro ya ganado se conserva.
+
+> El progreso de misiones se guarda de forma resistente (Hive + respaldo en
+> SharedPreferences) para sobrevivir cierres del sistema. Detalle en
+> [Modelo de Datos](modelo_datos.html).
+{: .note }

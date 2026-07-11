@@ -2,6 +2,17 @@
 
 A Flutter-based virtual pet app that uses a custom BLE hardware companion (M5-IMU-Sensor) to bring your pet to life through motion controls and real-time telemetry.
 
+## 📖 Documentation
+
+Full user manual **and** developer/handoff reference (bilingual ES/EN, dark theme):
+**[Therapets Manual](https://strawberryfrappe.github.io/Therapets/)** ·
+[English](https://strawberryfrappe.github.io/Therapets/en/)
+
+Covers installation, BLE pairing, pet care, minigames, settings — plus architecture,
+the BLE packet protocol, the native Android layer, telemetry/cloud, data model,
+CI/CD, and how to extend the app. Source lives in [`/docs`](docs/) (Jekyll + Just the
+Docs). To edit, see *Editing This Documentation* in the dev section.
+
 ## Download Builds
 
 | Channel | Build Type | Download Link |
@@ -149,44 +160,53 @@ The app automatically detects the connected device type based on the BLE packet 
 ```text
 lib/
 ├── main.dart               # App entry point
-├── core/                   # Bootstrapping & Lifecycle
+├── core/                   # Bootstrapping & lifecycle
+├── l10n/                   # Localization (ARB + generated) — EN/ES
 ├── services/
-│   ├── device/             # Low-level BLE & Signal Processors
-│   ├── cloud/              # Cloud connectivity & Telemetry tracking
+│   ├── device/             # Low-level BLE, signal processors, presence detection
+│   ├── cloud/              # Cloud connectivity & telemetry push
 │   ├── notifications/      # Foreground service & local notifications
 │   ├── locale_service.dart # i18n localization service
-│   └── update_service.dart # OTA or app updates
+│   └── update_service.dart # OTA / app updates
 ├── game/
 │   ├── virtual_pet_game.dart    # Main pet game
 │   ├── bob_the_blob.dart        # Pet implementation
 │   ├── pets/                    # Pet base classes & stats
+│   ├── items/                   # Food / clothing items
+│   ├── models/                  # Game data models
+│   ├── missions/                # Daily mission system
 │   └── minigames/
-│       ├── flappy_bird/         # Flappy Bird minigame
-│       └── orchestra/           # Pet Orchestra minigame
+│       ├── flappy_bird/         # Flappy Bird (discrete gesture control)
+│       ├── sbr/                 # SBR minigame
+│       ├── orchestra/           # Pet Orchestra (continuous telemetry)
+│       └── donut/               # Donut minigame
 └── screens/                     # Flutter UI screens
+    ├── controllers/             # Screen controllers
+    ├── settings/                # Settings & dev tools
+    ├── widgets/                 # Shared widgets & menus
     ├── pulse_oximeter/          # MAX30100 UI
     └── temperature_sensor/      # GY906 UI
 ```
 
 ## Quick Start
-```powershell
+```bash
 flutter pub get
 flutter run -d <device-id>
 ```
+Requires the Flutter SDK and an Android target (physical device or emulator).
+The commands are identical across Linux, macOS, and Windows.
 
-## Development Status
+## Features
 
-### Current Stage: Stage 5 — Multilingual Support ✅
-*Completed: Added English and Spanish localization with automatic device language detection and manual language switching via flag buttons in Settings.*
-
-### Stage History
-| Stage | Focus | Status |
-|-------|-------|--------|
-| 1 | **Connectivity** — Background BLE stability | ✅ Complete |
-| 2 | **Virtual Pet Base** — Hunger, Happiness, Currency | ✅ Complete |
-| 3 | **Telemetry Minigames** — Motion-controlled games | ✅ Accomplished |
-| 4 | **Cloud Connectivity** — Mission system + cloud sync | ✅ Accomplished |
-| 5 | **Multilingual Support** — English + Spanish with device language detection | ✅ Complete |
+- **Background BLE connectivity** — stable pairing with a native Android foreground
+  service that keeps the link and telemetry alive when the app is backgrounded.
+- **Virtual pet** — Tamagotchi-style hunger, happiness, wellbeing, currency, and
+  persistent state across restarts.
+- **Motion minigames** — Flame-based games driven by live sensor input (discrete
+  gestures and continuous telemetry).
+- **Cloud + missions** — daily mission system with ThingsBoard telemetry push.
+- **Bilingual UI** — English and Spanish with automatic device-language detection
+  and manual switching in Settings.
 
 ## Configuration
 

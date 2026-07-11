@@ -404,6 +404,10 @@ class BluetoothService {
 
   // Called by UI when the user agreed to grant permissions. This triggers the
   // platform request and unblocks pending `startScan()` calls.
+  //
+  // Permissions go through the native channel here (not the permission_handler
+  // plugin, which was removed for Android embedding compatibility). Do NOT re-add
+  // permission_handler — extend the native channel instead. See docs/adr/0005.
   Future<bool> performRequestPermissions() async {
     try {
       final map = await _requestPermissionsOnce();

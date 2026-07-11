@@ -10,6 +10,7 @@ import '../services/cloud/cloud_service.dart';
 import '../services/device/device_service.dart';
 import '../services/locale_service.dart';
 import '../services/notifications/pet_notification_service.dart';
+import '../services/treatment/treatment_service.dart';
 
 /// Result of the bootstrap process.
 class BootstrapResult {
@@ -19,6 +20,7 @@ class BootstrapResult {
   final MissionService missionService;
   final PetStats petStats;
   final PetNotificationService notificationService;
+  final TreatmentService treatmentService;
 
   BootstrapResult({
     required this.localeService,
@@ -27,6 +29,7 @@ class BootstrapResult {
     required this.missionService,
     required this.petStats,
     required this.notificationService,
+    required this.treatmentService,
   });
 }
 
@@ -82,6 +85,16 @@ class AppBootstrapper {
 
     final notificationService = PetNotificationService(localeService: localeService);
 
+    final treatmentService = TreatmentService();
+    try {
+      await treatmentService.init().timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('[Bootstrapper] TreatmentService init failed: $e');
+    }
+    // Fire-and-forget network fetch — don't let a slow/unreachable backend
+    // stall app launch; the menu falls back to fail-open until this lands.
+    treatmentService.refresh();
+
     debugPrint('[Bootstrapper] COMPLETE');
 
     return BootstrapResult(
@@ -91,6 +104,7 @@ class AppBootstrapper {
       missionService: missionService,
       petStats: petStats,
       notificationService: notificationService,
+      treatmentService: treatmentService,
     );
   }
 
