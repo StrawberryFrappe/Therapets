@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build_and_release:
@@ -97,23 +98,24 @@ jobs:
       - name: Build Android APK
         run: flutter build apk --release
 
-      - name: Commit Version Bump (Main only)
-        id: commit
+      - name: Create Pull Request for Version Bump
+        id: cpr
         if: steps.version.outputs.bump_commit == 'true'
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add pubspec.yaml
-          git commit -m "chore: bump version to ${{ steps.version.outputs.new_full_version }} [skip ci]"
-          git push
-          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to ${{ steps.version.outputs.new_full_version }} [skip ci]"
+          branch: "chore/bump-version-${{ steps.version.outputs.new_full_version }}"
+          title: "chore: bump version to ${{ steps.version.outputs.new_full_version }} [skip ci]"
+          body: "Automated version bump from GitHub Actions."
+          base: main
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: Release ${{ steps.version.outputs.tag_name }}
-          target_commitish: ${{ steps.commit.outputs.sha || github.sha }}
+          target_commitish: ${{ github.sha }}
           draft: false
           prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
           files: |
