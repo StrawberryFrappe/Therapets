@@ -4,6 +4,7 @@
 import 'package:flutter/foundation.dart';
 
 
+import '../game/game_settings.dart';
 import '../game/missions/mission_service.dart';
 import '../game/pets/pet_stats.dart';
 import '../services/cloud/cloud_service.dart';
@@ -38,6 +39,14 @@ class BootstrapResult {
 class AppBootstrapper {
   static Future<BootstrapResult> init() async {
     debugPrint('[Bootstrapper] STARTING');
+
+    // Load persisted game settings (presence mode, orchestra height mode, …) so
+    // they apply from launch, not only after the Settings screen is opened.
+    try {
+      await GameSettings.load();
+    } catch (e) {
+      debugPrint('[Bootstrapper] GameSettings load failed: $e');
+    }
 
     // 1. Initialize Services (Leaf dependencies first)
     final localeService = LocaleService();

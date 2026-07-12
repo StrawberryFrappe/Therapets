@@ -47,17 +47,30 @@ class OrchestraGame extends FlameGame {
   );
 
   // Derived state
-  double _currentFrequency = 220.0;
+  double _currentFrequency = 220.0; // smoothed (glide) frequency actually sounded
+  double _targetFrequency = 220.0; // raw target from height/lock
   double _currentPitchNorm = 0.5;
   double _currentVolume = 0.0;
-  bool _isPlaying = false;
+
+  // Audio gate + change detection (avoid per-frame platform-channel spam)
+  bool _gateOpen = false;
+  double _lastSentFreq = -1;
+  double _lastSentVol = -1;
+  bool _cleanedUp = false;
 
   // Pitch lock
   bool _pitchLocked = false;
   double _lockedFrequency = 220.0;
 
+  // Audible pitch band; keeps playback rate sane regardless of octave/span combo.
+  static const double _minFreq = 55.0;
+  static const double _maxFreq = 2000.0;
+
   // Sample timing for the estimator.
   DateTime? _lastSample;
+  // Consecutive near-still samples before the first auto-calibration, so the
+  // gravity baseline settles on a genuinely neutral pose.
+  int _stillSamples = 0;
 
   OrchestraGame({
     required this.deviceService,
@@ -81,6 +94,7 @@ class OrchestraGame extends FlameGame {
     add(_cursor);
 
     add(TitleDisplay(game: this));
+    add(StatusHint(game: this));
     add(ExitButton(onTap: _handleExit, game: this));
     _addControls();
 
@@ -121,8 +135,10 @@ class OrchestraGame extends FlameGame {
   // --- Control actions ---
 
   void _toggleLock() {
+    // Only meaningful once we have a real gesture-derived pitch.
+    if (!_height.isCalibrated) return;
     _pitchLocked = !_pitchLocked;
-    if (_pitchLocked) _lockedFrequency = _currentFrequency;
+    if (_pitchLocked) _lockedFrequency = _targetFrequency;
   }
 
   void _cycleScale() {
@@ -130,7 +146,9 @@ class OrchestraGame extends FlameGame {
     _scale.scale = values[(values.indexOf(_scale.scale) + 1) % values.length];
   }
 
-  void _shiftOctave(int delta) => _scale.octaveShift += delta;
+  // Clamp so the mapped notes stay musically sane (no absurd/negative pitch).
+  void _shiftOctave(int delta) =>
+      _scale.octaveShift = (_scale.octaveShift + delta).clamp(-3, 4).toInt();
 
   void _cycleSpan() =>
       _scale.spanOctaves = _scale.spanOctaves >= 3 ? 1 : _scale.spanOctaves + 1;
@@ -147,6 +165,13 @@ class OrchestraGame extends FlameGame {
   }
 
   String get _spanLabel => '${_scale.spanOctaves.toInt()}OCT';
+
+  /// A hint shown when the instrument can't be played yet, else null.
+  String? get statusHint {
+    if (!isDeviceConnected) return 'Connect a device in Settings to play';
+    if (!_height.isCalibrated) return 'Hold still — calibrating…';
+    return null;
+  }
 
   void _setupChorus() {
     _createRow(count: 6, yPos: size.y * 0.40, scale: 0.6, minPitch: 0.0, maxPitch: 0.4);
@@ -191,18 +216,26 @@ class OrchestraGame extends FlameGame {
   // --- AUDIO ---
 
   void _updateAudio() {
-    if (_currentVolume < 0.05) {
-      if (_isPlaying) {
+    // Hysteresis so a swing envelope hovering near the threshold doesn't
+    // chatter the tone on/off.
+    final shouldPlay = _gateOpen ? _currentVolume > 0.03 : _currentVolume > 0.06;
+
+    if (!shouldPlay) {
+      if (_gateOpen) {
         _mainPlayer.stopTone();
-        _isPlaying = false;
+        _gateOpen = false;
       }
-    } else {
-      if (!_isPlaying) {
-        _mainPlayer.startTone(_currentFrequency, _currentVolume);
-        _isPlaying = true;
-      } else {
-        _mainPlayer.setFrequency(_currentFrequency, _currentVolume);
-      }
+    } else if (!_gateOpen) {
+      _mainPlayer.startTone(_currentFrequency, _currentVolume);
+      _gateOpen = true;
+      _lastSentFreq = _currentFrequency;
+      _lastSentVol = _currentVolume;
+    } else if ((_currentFrequency - _lastSentFreq).abs() > 0.5 ||
+        (_currentVolume - _lastSentVol).abs() > 0.01) {
+      // Only cross the platform channel when something actually changed.
+      _mainPlayer.setFrequency(_currentFrequency, _currentVolume);
+      _lastSentFreq = _currentFrequency;
+      _lastSentVol = _currentVolume;
     }
 
     for (final musician in _musicians) {
@@ -220,16 +253,20 @@ class OrchestraGame extends FlameGame {
     _lastSample = now;
 
     _height.update(data, dt);
-    // Adopt the first stable pose as neutral; the CALIB button re-zeros later.
+    // Auto-calibrate once the arm has been reasonably still for a moment, so the
+    // neutral pose isn't captured mid-motion. The CALIB button re-zeros later.
     if (!_height.isCalibrated) {
+      final gyroStill = data.gx.abs() + data.gy.abs() + data.gz.abs() < 45;
+      _stillSamples = gyroStill ? _stillSamples + 1 : 0;
+      if (_stillSamples < 15) return;
       _height.calibrate();
       return;
     }
 
     final h = _height.height;
     _currentPitchNorm = h;
-    final freq = _scale.map(h).frequency;
-    _currentFrequency = _pitchLocked ? _lockedFrequency : freq;
+    final freq = _pitchLocked ? _lockedFrequency : _scale.map(h).frequency;
+    _targetFrequency = freq.clamp(_minFreq, _maxFreq);
     _currentVolume = _height.swingEnergy;
 
     // Vertical pitch indicator: high pitch = top of screen.
@@ -239,11 +276,18 @@ class OrchestraGame extends FlameGame {
   @override
   void update(double dt) {
     super.update(dt);
+    // Glide the sounded pitch toward the target (portamento; also smooths the
+    // discrete jumps at scale-snap boundaries).
+    final t = (dt * 12.0).clamp(0.0, 1.0);
+    _currentFrequency += (_targetFrequency - _currentFrequency) * t;
     _updateAudio();
   }
 
-  /// Clean up all audio and subscriptions. Call this when leaving the game.
+  /// Clean up all audio and subscriptions. Idempotent — it is called both from
+  /// the in-game EXIT button and from the screen's dispose().
   void cleanup() {
+    if (_cleanedUp) return;
+    _cleanedUp = true;
     _mainPlayer.stopTone();
     _mainPlayer.dispose();
     for (final musician in _musicians) {
@@ -283,6 +327,38 @@ class TitleDisplay extends PositionComponent {
     );
     textPainter.layout();
     textPainter.paint(canvas, Offset((game.size.x - textPainter.width) / 2, 0));
+  }
+}
+
+/// Centered hint shown while the instrument can't be played (no device yet,
+/// or still calibrating). Renders nothing once playable.
+class StatusHint extends PositionComponent {
+  final OrchestraGame game;
+
+  StatusHint({required this.game});
+
+  @override
+  void render(Canvas canvas) {
+    final hint = game.statusHint;
+    if (hint == null) return;
+    final tp = TextPainter(
+      text: TextSpan(
+        text: hint,
+        style: const TextStyle(
+          color: Color(0xFFFFE082),
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'Monocraft',
+          shadows: [Shadow(offset: Offset(1, 1), blurRadius: 3)],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    tp.layout();
+    tp.paint(
+      canvas,
+      Offset((game.size.x - tp.width) / 2, game.size.y * 0.28),
+    );
   }
 }
 
