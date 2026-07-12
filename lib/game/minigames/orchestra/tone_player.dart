@@ -19,6 +19,7 @@ class TonePlayer {
   bool _isPlaying = false;
   bool _sourceReady = false;
   bool _disposed = false;
+  bool _torndown = false;
   Uint8List? _wav;
   Future<void> _chain = Future<void>.value();
 
@@ -40,13 +41,14 @@ class TonePlayer {
   double _rateFor(double frequency) =>
       (frequency / baseFrequency).clamp(_minRate, _maxRate);
 
-  // Serialize every public op so unawaited calls can't interleave. Each op is
-  // bounded by a timeout so a hung native call degrades to silence instead of
-  // wedging the queue (and dispose() behind it) for the process lifetime.
+  // Serialize every public op so unawaited per-frame calls can't interleave and
+  // double-prepare the native player. No timeout here on purpose: Future.timeout
+  // does NOT cancel the underlying native call, so it would let an abandoned op
+  // run concurrently with the next one — reintroducing the exact race this chain
+  // exists to prevent. A genuine native hang is a separate, rare platform
+  // concern; correctness of the common path takes priority.
   Future<void> _run(Future<void> Function() op) {
-    final next = _chain.then(
-      (_) => op().timeout(const Duration(seconds: 2), onTimeout: () {}),
-    );
+    final next = _chain.then((_) => op());
     _chain = next.then((_) {}, onError: (_) {});
     return next;
   }
@@ -117,11 +119,14 @@ class TonePlayer {
 
   bool get isPlaying => _isPlaying;
 
-  Future<void> dispose() => _run(_doDispose);
+  Future<void> dispose() {
+    _disposed = true; // reject new ops immediately; tear down in queue order
+    return _run(_doDispose);
+  }
 
   Future<void> _doDispose() async {
-    if (_disposed) return;
-    _disposed = true;
+    if (_torndown) return;
+    _torndown = true;
     _isPlaying = false;
     try {
       await _player.stop();

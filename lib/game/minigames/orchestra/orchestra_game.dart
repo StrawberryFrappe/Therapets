@@ -41,7 +41,7 @@ class OrchestraGame extends FlameGame {
   final HeightEstimator _height = HeightEstimator();
   final MusicScale _scale = MusicScale(
     scale: ScaleType.pentatonic,
-    rootMidi: 48, // C3
+    rootMidi: 57, // A3 — centered in the audible band so OCT-/OCT+ both work
     spanOctaves: 2,
     snapStrength: 0.85,
   );
