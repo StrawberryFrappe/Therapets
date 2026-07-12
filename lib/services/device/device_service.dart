@@ -350,6 +350,8 @@ class DeviceService {
   
   // Passthrough for scanning (needed by SettingsPage)
   Stream<List<ScanResult>> get foundDevices$ => _bluetooth.foundDevices$;
+  Stream<ScanStatus> get scanStatus$ => _bluetooth.scanStatus$;
+  ScanStatus get scanStatus => _bluetooth.scanStatus;
   
   Future<void> startScan({Duration? timeout}) => _bluetooth.startScan(timeout: timeout);
   Future<void> stopScan() => _bluetooth.stopScan();

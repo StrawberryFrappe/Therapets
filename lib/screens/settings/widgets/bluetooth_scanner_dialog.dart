@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:Therapets/l10n/app_localizations.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../../../services/device/device_service.dart';
+import '../../../services/device/bluetooth_service.dart' show ScanStatus;
 import 'telemetry_terminal.dart';
 
 /// A dialog for scanning and connecting to Bluetooth devices.
@@ -62,6 +63,21 @@ class _BluetoothScannerDialogState extends State<BluetoothScannerDialog> {
     }
   }
 
+  String _statusMessage(ScanStatus status) {
+    switch (status) {
+      case ScanStatus.scanning:
+        return 'Scanning for devices…';
+      case ScanStatus.bluetoothOff:
+        return 'Bluetooth is off. Turn it on and scan again.';
+      case ScanStatus.permissionDenied:
+        return 'Bluetooth permission denied. Grant Nearby devices / Location in system settings, then scan again.';
+      case ScanStatus.error:
+        return 'Scan failed. Tap scan to retry.';
+      case ScanStatus.idle:
+        return 'No devices found. Make sure the sensor is powered on and nearby, then scan again.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -84,6 +100,38 @@ class _BluetoothScannerDialogState extends State<BluetoothScannerDialog> {
                       stream: widget.device.foundDevices$,
                       builder: (ctx, snap) {
                         final found = snap.data ?? const [];
+                        if (found.isEmpty) {
+                          // Never show a silent empty list: surface why.
+                          return StreamBuilder<ScanStatus>(
+                            stream: widget.device.scanStatus$,
+                            initialData: widget.device.scanStatus,
+                            builder: (ctx2, ss) {
+                              final status = ss.data ?? ScanStatus.idle;
+                              return Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (status == ScanStatus.scanning)
+                                        const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                                        ),
+                                      if (status == ScanStatus.scanning) const SizedBox(height: 12),
+                                      Text(
+                                        _statusMessage(status),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }
                         return ListView.separated(
                           itemCount: found.length,
                           separatorBuilder: (_, __) => const Divider(color: Colors.black, thickness: 2),
