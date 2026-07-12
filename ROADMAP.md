@@ -101,22 +101,29 @@ policy written (ADR-0009); `docs/adr/` exists; `FACTORY.md` refreshed.
 
 ---
 
-### Phase 2 — #4 SBR difficulty selector (hard must-ship)
-Self-contained win. Copy the pattern already proven in Flappy Bird.
+### Phase 2 — #4 SBR difficulty selector (hard must-ship) — **CODE DONE 2026-07-11**
+Self-contained win. Copied the pattern already proven in Flappy Bird.
 
-- [ ] Model SBR difficulty on `lib/game/minigames/flappy_bird/flappy_difficulty.dart`
-      (`FlappyDifficulty` enum + `FlappyDifficultyConfig` preset map: easy/medium/hard/extreme).
-- [ ] Identify SBR tunables in `lib/game/minigames/sbr/sbr_game.dart` (ball speed, brick
-      rows/layout, bumper size, power-up rate, speed ramp) and factor them into a
-      `SbrDifficultyConfig`.
-- [ ] Add difficulty picker UI in `sbr_screen.dart` (mirror Flappy's selector; reuse
-      numbered 1–4 labels — see FACTORY note about not discouraging young players).
-- [ ] Localize new strings in `lib/l10n/app_en.arb` + `app_es.arb` and regenerate
-      (`flutter gen-l10n`).
-- [ ] Test: `flutter test`; manual golden-path run of SBR at each level.
+- [x] `SbrDifficulty` enum + `SbrDifficultyConfig` preset map (easy/medium/hard/extreme) in
+      new `lib/game/minigames/sbr/sbr_difficulty.dart`, mirroring `flappy_difficulty.dart`.
+- [x] SBR tunables factored into the config — **owner's chosen knobs:** bumper width
+      (0.32→0.15), starting lives (5/4/3/3, **floored at 3** — hard/extreme never below the
+      base), per-hit speed ramp + cap, helpful-brick spawn bonus (more powerups on easy).
+      Ball base speed left at 300 for all; **stacks on top of** the existing per-level curve
+      (grid/HP growth untouched). Coins mirror Flappy 1/1/2/4.
+- [x] Difficulty picker UI in `sbr_screen.dart` — title/difficulty overlay before game build,
+      1–4 `SegmentedButton` (star icons, numbered per FACTORY young-player note), choice
+      persisted to SharedPreferences (`sbr_difficulty`). Game now built lazily on Start.
+- [x] Strings: reused existing `gameSbr` + `difficultyEasy/Medium/Hard/Extreme` — no new
+      difficulty strings needed. (A `sbrCalibrationStep` key was added for the separate
+      calibration-overlay redesign, not this feature.)
+- [x] `flutter test` green (57 pass; added `test/sbr_difficulty_test.dart` preset invariants).
+      `flutter analyze` clean.
+- [ ] **Manual golden-path run of SBR at each level — DEFERRED to owner's verification sweep.**
+      Not driven on device yet; extreme (0.15 bumper) under IMU tilt needs a playtest.
 
-**Acceptance:** SBR launches with a 1–4 difficulty picker; each level measurably differs;
-ES/EN strings present; tests pass.
+**Acceptance:** ✅ 1–4 picker + measurably-different presets + ES/EN + tests. ⚠️ Manual
+per-level playtest outstanding (owner sweep). Values are one-line tweaks in `sbr_difficulty.dart`.
 
 ---
 

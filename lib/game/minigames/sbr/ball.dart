@@ -208,6 +208,18 @@ class Ball extends PositionComponent with CollisionCallbacks {
       final newY = dy > 0 ? velocity.y.abs() : -velocity.y.abs();
       velocity.y = newY;
     }
+
+    _applySpeedRamp();
+  }
+
+  /// Ramps this ball's speed on each brick hit, capped per difficulty.
+  void _applySpeedRamp() {
+    final ramp = game.difficultyConfig.speedRamp;
+    if (ramp <= 1.0) return;
+    final maxSpeed = speed * game.difficultyConfig.maxSpeedMultiplier;
+    final len = velocity.length;
+    if (len == 0 || len >= maxSpeed) return;
+    velocity.scaleTo((len * ramp).clamp(0, maxSpeed));
   }
 
   void _handleBallCollision(Ball other) {
