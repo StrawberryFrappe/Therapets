@@ -90,6 +90,7 @@ class OrchestraGame extends FlameGame {
     await super.onLoad();
 
     _height.mode = GameSettings.orchestraHeightMode;
+    _clampRangeToBand();
 
     _setupChorus();
 
@@ -144,18 +145,36 @@ class OrchestraGame extends FlameGame {
     if (_pitchLocked) _lockedFrequency = _targetFrequency;
   }
 
+  // Audible MIDI band = TonePlayer's rate-bounded frequency range
+  // (110 Hz ≈ MIDI 45, 1760 Hz = MIDI 93). Notes outside this get rate-clamped
+  // to one pitch, so we never let a control combo push notes past it.
+  static const int _bandMinMidi = 45;
+  static const int _bandMaxMidi = 93;
+
   void _cycleScale() {
     const values = ScaleType.values;
     _scale.scale = values[(values.indexOf(_scale.scale) + 1) % values.length];
   }
 
-  // Clamp so the mapped notes stay inside the audible band (no absurd pitch,
-  // no distinct notes collapsing onto the same rate-clamped drone).
-  void _shiftOctave(int delta) =>
-      _scale.octaveShift = (_scale.octaveShift + delta).clamp(-2, 3).toInt();
+  void _shiftOctave(int delta) {
+    _scale.octaveShift += delta;
+    _clampRangeToBand();
+  }
 
-  void _cycleSpan() =>
-      _scale.spanOctaves = _scale.spanOctaves >= 3 ? 1 : _scale.spanOctaves + 1;
+  void _cycleSpan() {
+    _scale.spanOctaves = _scale.spanOctaves >= 3 ? 1 : _scale.spanOctaves + 1;
+    _clampRangeToBand();
+  }
+
+  // Clamp octaveShift so BOTH ends of the mapped range —
+  // [effectiveRoot, effectiveRoot + spanOctaves*12] — stay in the audible band,
+  // jointly with the current span (independent clamps let the combo escape).
+  void _clampRangeToBand() {
+    final span = _scale.spanOctaves.toInt();
+    final lo = ((_bandMinMidi - _scale.rootMidi) / 12).ceil();
+    final hi = ((_bandMaxMidi - _scale.rootMidi) / 12).floor() - span;
+    _scale.octaveShift = _scale.octaveShift.clamp(lo, hi < lo ? lo : hi).toInt();
+  }
 
   String get _scaleLabel {
     switch (_scale.scale) {

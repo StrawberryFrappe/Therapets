@@ -40,9 +40,13 @@ class TonePlayer {
   double _rateFor(double frequency) =>
       (frequency / baseFrequency).clamp(_minRate, _maxRate);
 
-  // Serialize every public op so unawaited calls can't interleave.
+  // Serialize every public op so unawaited calls can't interleave. Each op is
+  // bounded by a timeout so a hung native call degrades to silence instead of
+  // wedging the queue (and dispose() behind it) for the process lifetime.
   Future<void> _run(Future<void> Function() op) {
-    final next = _chain.then((_) => op());
+    final next = _chain.then(
+      (_) => op().timeout(const Duration(seconds: 2), onTimeout: () {}),
+    );
     _chain = next.then((_) {}, onError: (_) {});
     return next;
   }
