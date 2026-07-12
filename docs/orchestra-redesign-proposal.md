@@ -126,29 +126,35 @@ rest. Multi-octave without cramming precision.
   modes, calibrate, ZUPT. 8 invariant tests (drift-bounding, calibration, per-mode).
 - No game/UI touched. Filter tunables are first-cut, marked for on-device tuning.
 
-**Phase 1 — swing/dynamics layer** (next; needs the game loop)
-- Band-pass horizontal accel → swing energy → gate + volume. Feed `TonePlayer`.
-- Decide sustain model (steady swing = steady note).
+**Phase 1 — swing/dynamics layer  ✅ DONE**
+- `HeightEstimator.swingEnergy`: band-passed horizontal linear-accel envelope
+  (attack/release), independent of the pitch/height signal. Feeds volume + gate.
 
-**Phase 2 — wire pitch into the game**
-- Replace `OrchestraGame._onTelemetry` tilt mapping with
-  `HeightEstimator` → `MusicScale` → frequency. Remove the old dual-axis tilt code.
-- Render the altitude **cube** + nearest-note marker.
+**Phase 2 — wire pitch into the game  ✅ DONE**
+- `OrchestraGame._onTelemetry` now drives `HeightEstimator` → `MusicScale` →
+  frequency for pitch and `swingEnergy` for volume/gate; auto-calibrates on the
+  first sample. Old dual-axis tilt mapping + touch pitch-stomp removed; the
+  `MotionCursor` is repurposed as a vertical pitch indicator. **No cube** (owner
+  dropped it).
 
-**Phase 3 — in-game controls**
-- Pitch-lock toggle, calibrate button, range selector (scale / span / octave-shift).
+**Phase 3 — in-game controls  ✅ DONE**
+- Flame `LabelButton` row: Calibrate, Lock (toggle, captures current freq),
+  Scale cycle, Octave −/+, Span cycle.
 
-**Phase 4 — Advanced Settings + persistence**
-- Height-mode toggle (fused/angle/height) in Advanced Settings, persisted in
-  `GameSettings` via SharedPreferences JSON (Hive forbidden). Add a persistence test.
+**Phase 4 — Advanced Settings + persistence  ✅ DONE**
+- `GameSettings.orchestraHeightMode` (fused/angle/height), persisted via
+  SharedPreferences name key; ChoiceChip selector in Settings; game reads it on
+  load. Persistence test added.
 
-**Phase 5 — on-device tuning**
+**Phase 5 — on-device tuning  ⏳ PENDING (needs hardware)**
 - Tune the estimator constants (gravityAlpha, restThresholds, complementaryK,
-  ranges) against the real sensor. Consider relaxing the 10g packet filter for the
-  game. Confirm the `angleOnly` fallback path.
+  ranges, swing attack/release/full-scale) against the real sensor. Consider
+  relaxing the 10g packet filter for the game. Confirm the `angleOnly` fallback.
+- **Not runtime-verified:** the in-game Flame controls and audio/feel were only
+  checked via analyze + unit tests (no device/emulator available). Verify in-app.
 
-Each phase: `flutter test` + `flutter analyze` green before commit; game/UI phases
-verified in-app before "done".
+Each phase: `flutter test` + `flutter analyze` green before commit; the game/UI
+phases still need in-app verification (Phase 5).
 
 ---
 
