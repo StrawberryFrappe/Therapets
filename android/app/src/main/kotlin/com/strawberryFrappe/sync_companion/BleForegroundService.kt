@@ -438,7 +438,13 @@ class BleForegroundService : Service() {
 
     private fun scheduleFallbackReconnect() {
         reconnectAttempts++
-        val delay = (Math.min(30, 1 shl reconnectAttempts) * 1000).toLong()
+        // Cap the shift exponent: Kotlin's `shl` masks the count to 5 bits, so
+        // `1 shl 31` is negative and larger values wrap unpredictably. Left
+        // unbounded, the backoff would go negative after ~31 failed attempts
+        // and postDelayed() would fire immediately, spinning a tight reconnect
+        // loop that drains the battery. 2^5 already exceeds the 30s ceiling.
+        val exp = min(reconnectAttempts, 5)
+        val delay = (min(30, 1 shl exp) * 1000).toLong()
         handler.postDelayed({
             val did = prefs?.getString(PREF_SAVED_ID, null)
             if (did != null && gatt == null && !isScanning) scheduleReconnect()
