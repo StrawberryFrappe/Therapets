@@ -503,4 +503,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get sbrCalibrationRight =>
       'Gira la muñeca a la derecha al máximo y toca para confirmar';
+
+  @override
+  String sbrCalibrationStep(int current, int total) {
+    return 'Paso $current de $total';
+  }
 }

@@ -100,26 +100,32 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
     }
   }
 
+  /// 1-based step index for the current phase (Left = 1, Right = 2).
+  int _getStepNumber() {
+    switch (_calibrator.state) {
+      case CalibrationState.calibratingRight:
+        return 2;
+      default:
+        return 1;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     return GestureDetector(
       onTap: _handleTap,
       behavior: HitTestBehavior.opaque,
       child: Stack(
         children: [
-          // Background: live 3-D donut (reacts to device telemetry)
-          Positioned.fill(
-            child: DonutGame(deviceService: widget.deviceService),
+          // Plain dark background (donut is now a small corner indicator).
+          const Positioned.fill(
+            child: ColoredBox(color: Color(0xFF1A1A1A)),
           ),
 
-          // Semi-transparent overlay
-          Positioned.fill(
-            child: Container(color: Colors.black.withValues(alpha: 0.45)),
-          ),
-
-          // Image from bottom
+          // Arm reference image from bottom — primary how-to cue, kept prominent.
           Positioned(
-            bottom: -50,
+            bottom: -40,
             left: 0,
             right: 0,
             child: IgnorePointer(
@@ -128,26 +134,64 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
                 child: Image.asset(
                   _getImageAsset(),
                   fit: BoxFit.contain,
-                  height: MediaQuery.of(context).size.height * 0.5,
+                  height: MediaQuery.of(context).size.height * 0.4,
                 ),
               ),
             ),
           ),
 
-          // Instructions at top
+          // Live 3-D donut: small tracking indicator pinned top-right.
           Positioned(
-            top: 60,
-            left: 24,
-            right: 24,
-            child: Text(
-              _getInstruction(context),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                shadows: [
-                  Shadow(offset: Offset(2, 2), blurRadius: 6, color: Colors.black87),
+            top: 48,
+            right: 20,
+            child: Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white24, width: 1.5),
+                color: Colors.black26,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: DonutGame(deviceService: widget.deviceService),
+            ),
+          ),
+
+          // Structured instruction card.
+          Align(
+            alignment: const Alignment(0, -0.35),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 340),
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white24, width: 2),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    loc.sbrCalibrationStep(_getStepNumber(), 2),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _getInstruction(context),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      height: 1.3,
+                    ),
+                  ),
                 ],
               ),
             ),

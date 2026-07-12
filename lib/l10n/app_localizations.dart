@@ -991,6 +991,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Turn wrist max right and tap to confirm'**
   String get sbrCalibrationRight;
+
+  /// No description provided for @sbrCalibrationStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String sbrCalibrationStep(int current, int total);
 }
 
 class _AppLocalizationsDelegate

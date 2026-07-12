@@ -203,5 +203,7 @@
   "@sbrLives": { "placeholders": { "lives": { "type": "int" } } },
   "sbrCalibrationCenter": "Hold arm straight and tap to confirm",
   "sbrCalibrationLeft": "Turn wrist max left and tap to confirm",
-  "sbrCalibrationRight": "Turn wrist max right and tap to confirm"
+  "sbrCalibrationRight": "Turn wrist max right and tap to confirm",
+  "sbrCalibrationStep": "Step {current} of {total}",
+  "@sbrCalibrationStep": { "placeholders": { "current": { "type": "int" }, "total": { "type": "int" } } }
 }

@@ -499,4 +499,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sbrCalibrationRight => 'Turn wrist max right and tap to confirm';
+
+  @override
+  String sbrCalibrationStep(int current, int total) {
+    return 'Step $current of $total';
+  }
 }

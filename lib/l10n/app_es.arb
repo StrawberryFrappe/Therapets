@@ -184,5 +184,6 @@
   "sbrLives": "Vidas: {lives}",
   "sbrCalibrationCenter": "Mantén el brazo recto y toca para confirmar",
   "sbrCalibrationLeft": "Gira la muñeca a la izquierda al máximo y toca para confirmar",
-  "sbrCalibrationRight": "Gira la muñeca a la derecha al máximo y toca para confirmar"
+  "sbrCalibrationRight": "Gira la muñeca a la derecha al máximo y toca para confirmar",
+  "sbrCalibrationStep": "Paso {current} de {total}"
 }
