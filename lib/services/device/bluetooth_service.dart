@@ -333,10 +333,12 @@ class BluetoothService {
     final now = DateTime.now();
     if (_scanSub != null) return; // already scanning
     if (_lastScanStart != null && now.difference(_lastScanStart!) < _scanDebounce) return;
-    _lastScanStart = now;
 
     // `_ensureBluetoothOnBeforeScan` emits the specific reason (bluetoothOff /
     // permissionDenied) on failure so the UI never shows a silent empty list.
+    // NOTE: do NOT set the debounce timestamp before this. A failed start
+    // (BT off, perms denied, plugin throw) must not burn the debounce window,
+    // or the user's next tap-to-retry is silently swallowed for 5s.
     final ok = await _ensureBluetoothOnBeforeScan();
     if (!ok) return;
 
@@ -345,6 +347,13 @@ class BluetoothService {
     _foundController.add(List<ScanResult>.from(_found));
     _emitScanStatus(ScanStatus.scanning);
     _scanSub?.cancel();
+    // Defensively stop any lingering plugin-level scan first. flutter_blue_plus
+    // throws "Another scan is already in progress" if a prior scan (e.g. a
+    // dialog closed without a clean stop) is still active — which surfaced to
+    // the user as "Scan failed. Tap scan to retry."
+    try {
+      await FlutterBluePlus.stopScan();
+    } catch (_) {}
     try {
       await FlutterBluePlus.startScan();
     } catch (e) {
@@ -352,6 +361,8 @@ class BluetoothService {
       _emitScanStatus(ScanStatus.error);
       return; // don't attach a dead listener: leaves _scanSub null so retry works
     }
+    // Only now that the scan actually started do we arm the debounce.
+    _lastScanStart = now;
     _scanSub = FlutterBluePlus.scanResults.listen((results) {
       for (final r in results) {
         // No name filter: unnamed devices are kept. Previously they were
