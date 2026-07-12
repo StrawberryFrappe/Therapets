@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/device/presence_profile.dart';
+import 'minigames/orchestra/height_estimator.dart';
 
 /// Which presence-detection profile to use, based on the connected device's
 /// firmware. See [PresenceProfile].
@@ -20,8 +21,13 @@ class GameSettings {
   /// firmware); flip to lenient for devices still on the old duty-cycle build.
   static PresenceMode presenceMode = PresenceMode.strict;
 
+  /// How the Orchestra minigame estimates arm height for pitch. Defaults to
+  /// [HeightMode.fused]; `angleOnly` is the robust drift-free fallback.
+  static HeightMode orchestraHeightMode = HeightMode.fused;
+
   static const _prefsKey = 'sbr_upward_speed_multiplier';
   static const _presenceModeKey = 'presence_mode';
+  static const _orchestraHeightModeKey = 'orchestra_height_mode';
 
   /// Resolve the current mode to its tuning profile.
   static PresenceProfile get presenceProfile => presenceMode == PresenceMode.lenient
@@ -37,6 +43,11 @@ class GameSettings {
       (m) => m.name == modeName,
       orElse: () => presenceMode,
     );
+    final heightModeName = prefs.getString(_orchestraHeightModeKey);
+    orchestraHeightMode = HeightMode.values.firstWhere(
+      (m) => m.name == heightModeName,
+      orElse: () => orchestraHeightMode,
+    );
   }
 
   /// Persist and apply multiplier.
@@ -51,5 +62,12 @@ class GameSettings {
     presenceMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_presenceModeKey, mode.name);
+  }
+
+  /// Persist the Orchestra height-sensing mode.
+  static Future<void> setOrchestraHeightMode(HeightMode mode) async {
+    orchestraHeightMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_orchestraHeightModeKey, mode.name);
   }
 }

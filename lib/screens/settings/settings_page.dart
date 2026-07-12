@@ -19,6 +19,7 @@ import 'sections/debug_section.dart';
 import 'sections/app_updates_section.dart';
 import '../../services/update_service.dart';
 import '../../game/game_settings.dart';
+import '../../game/minigames/orchestra/height_estimator.dart';
 import 'widgets/telemetry_terminal.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -51,6 +52,8 @@ class _SettingsPageState extends State<SettingsPage> {
   double _sbrUpwardMultiplier = 1.5;
   // Presence mode (firmware duty-cycle handling)
   PresenceMode _presenceMode = PresenceMode.strict;
+  // Orchestra minigame height-sensing mode
+  HeightMode _orchestraHeightMode = HeightMode.fused;
   
   // Cloud configuration
   late final CloudService _cloud;
@@ -97,6 +100,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _sbrUpwardMultiplier = GameSettings.sbrUpwardSpeedMultiplier;
       _presenceMode = GameSettings.presenceMode;
+      _orchestraHeightMode = GameSettings.orchestraHeightMode;
     });
   }
 
@@ -105,6 +109,23 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.device.applyPresenceMode();
     if (!mounted) return;
     setState(() => _presenceMode = mode);
+  }
+
+  Future<void> _saveOrchestraHeightMode(HeightMode mode) async {
+    await GameSettings.setOrchestraHeightMode(mode);
+    if (!mounted) return;
+    setState(() => _orchestraHeightMode = mode);
+  }
+
+  static String _heightModeLabel(HeightMode m) {
+    switch (m) {
+      case HeightMode.fused:
+        return 'Fused';
+      case HeightMode.angleOnly:
+        return 'Angle';
+      case HeightMode.heightOnly:
+        return 'Height';
+    }
   }
 
   Future<void> _saveSbrUpwardMultiplier(double v) async {
@@ -440,6 +461,38 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: const Text('Lenient (old battery-saving firmware)', style: TextStyle(fontSize: 12)),
                     value: _presenceMode == PresenceMode.lenient,
                     onChanged: (on) => _savePresenceMode(on ? PresenceMode.lenient : PresenceMode.strict),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          Card(
+            color: Colors.grey[900],
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Orchestra Height Sensing', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'How the Orchestra minigame turns arm height into pitch. Fused '
+                    '(default) blends motion + tilt; Angle is the most stable; Height '
+                    'is truest but drifts.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final m in HeightMode.values)
+                        ChoiceChip(
+                          label: Text(_heightModeLabel(m), style: const TextStyle(fontSize: 11)),
+                          selected: _orchestraHeightMode == m,
+                          onSelected: (_) => _saveOrchestraHeightMode(m),
+                        ),
+                    ],
                   ),
                 ],
               ),

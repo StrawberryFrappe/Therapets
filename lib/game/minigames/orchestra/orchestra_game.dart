@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
@@ -8,77 +7,83 @@ import 'package:flutter/painting.dart';
 
 import '../../../services/device/device_service.dart';
 
+import '../../game_settings.dart';
 import '../../pets/pet_stats.dart';
 import 'cursor.dart';
+import 'height_estimator.dart';
+import 'music_scale.dart';
 import 'pet_musician.dart';
 import 'tone_player.dart';
 
-/// Orchestra minigame where pets sing at different pitches based on touch position.
-/// - Horizontal position determines pitch (smooth glide, not discrete notes)
-/// - Vertical position determines volume (top = loud, bottom = quiet)
-/// - Hold to sing, release to stop
-/// - Multiple simultaneous touches for polyphony
-/// Orchestra minigame where pets form a choir and are conducted by motion.
-/// - Tilt X: Pitch (Low -> High)
-/// - Tilt Y: Volume (Quiet -> Loud)
-/// - Visuals: Cursor follows tilt, pets animate based on their vocal range.
-class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTapDetector {
+/// Orchestra minigame — a "theremin-choir" played by arm movement.
+/// - Horizontal swing sounds the choir and sets its volume (harder = louder).
+/// - Arm height sets the pitch, soft-snapped to a musical scale.
+/// - Pitch-lock freezes the note; Calibrate sets the neutral pose.
+/// Height comes from [HeightEstimator] (accel+gyro fusion); pitch from
+/// [MusicScale]. See docs/orchestra-redesign-proposal.md.
+class OrchestraGame extends FlameGame {
   final DeviceService deviceService;
   final PetStats petStats;
   final VoidCallback onExit;
   final bool isDeviceConnected;
-  
+
   // Musicians
   final List<PetMusician> _musicians = [];
-  
+
   // Audio
   final TonePlayer _mainPlayer = TonePlayer();
-  
-  // Controls
+
+  // Visual pitch indicator
   late MotionCursor _cursor;
   StreamSubscription<TelemetryData>? _telemetrySub;
-  
-  // State
-  double _currentPitch = 0.0; // 0.0 to 1.0
-  double _currentVolume = 0.0; // 0.0 to 1.0
+
+  // Input model
+  final HeightEstimator _height = HeightEstimator();
+  final MusicScale _scale = MusicScale(
+    scale: ScaleType.pentatonic,
+    rootMidi: 48, // C3
+    spanOctaves: 2,
+    snapStrength: 0.85,
+  );
+
+  // Derived state
+  double _currentFrequency = 220.0;
+  double _currentPitchNorm = 0.5;
+  double _currentVolume = 0.0;
   bool _isPlaying = false;
-  
-  // Motion Calibration/Smoothing
-  Vector2 _calibrationOffset = Vector2.zero();
-  bool _isCalibrated = false;
-  Vector2 _smoothedMotion = Vector2.zero(); // Matches tilt range (-1 to 1 approx)
-  static const double smoothingFactor = 0.15; // Smooth movement
-  
-  // Musical Range (Expanded ~4.5 octaves)
-  static const double minFrequency = 65.41; // C2 (Deep Bass)
-  static const double maxFrequency = 1567.98; // G6 (High Soprano)
-  
+
+  // Pitch lock
+  bool _pitchLocked = false;
+  double _lockedFrequency = 220.0;
+
+  // Sample timing for the estimator.
+  DateTime? _lastSample;
+
   OrchestraGame({
     required this.deviceService,
     required this.petStats,
     required this.onExit,
     this.isDeviceConnected = false,
   });
-  
+
   @override
   Color backgroundColor() => const Color(0xFF2D1B4E); // Deep purple stage
-  
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    
-    // 1. Setup Stage & Musicians (Chorus Layout)
+
+    _height.mode = GameSettings.orchestraHeightMode;
+
     _setupChorus();
-    
-    // 2. Add Cursor
+
     _cursor = MotionCursor(position: size / 2);
     add(_cursor);
-    
-    // 3. Add UI
+
     add(TitleDisplay(game: this));
     add(ExitButton(onTap: _handleExit, game: this));
-    
-    // 4. Input Setup
+    _addControls();
+
     if (isDeviceConnected) {
       _telemetrySub = deviceService.telemetry$.listen(
         _onTelemetry,
@@ -87,47 +92,72 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
       deviceService.requestNativeStatus();
     }
   }
-  
+
+  void _addControls() {
+    // A row of tap controls along the bottom of the stage.
+    const w = 76.0;
+    const h = 34.0;
+    const gap = 6.0;
+    final y = size.y - h - 8;
+    var x = 8.0;
+    void place(String Function() label, VoidCallback onPressed) {
+      add(LabelButton(
+        label: label,
+        onPressed: onPressed,
+        position: Vector2(x, y),
+        size: Vector2(w, h),
+      ));
+      x += w + gap;
+    }
+
+    place(() => 'CALIB', _height.calibrate);
+    place(() => _pitchLocked ? 'LOCKED' : 'LOCK', _toggleLock);
+    place(() => _scaleLabel, _cycleScale);
+    place(() => 'OCT-', () => _shiftOctave(-1));
+    place(() => 'OCT+', () => _shiftOctave(1));
+    place(() => _spanLabel, _cycleSpan);
+  }
+
+  // --- Control actions ---
+
+  void _toggleLock() {
+    _pitchLocked = !_pitchLocked;
+    if (_pitchLocked) _lockedFrequency = _currentFrequency;
+  }
+
+  void _cycleScale() {
+    const values = ScaleType.values;
+    _scale.scale = values[(values.indexOf(_scale.scale) + 1) % values.length];
+  }
+
+  void _shiftOctave(int delta) => _scale.octaveShift += delta;
+
+  void _cycleSpan() =>
+      _scale.spanOctaves = _scale.spanOctaves >= 3 ? 1 : _scale.spanOctaves + 1;
+
+  String get _scaleLabel {
+    switch (_scale.scale) {
+      case ScaleType.pentatonic:
+        return 'PENTA';
+      case ScaleType.diatonic:
+        return 'DIA';
+      case ScaleType.chromatic:
+        return 'CHROM';
+    }
+  }
+
+  String get _spanLabel => '${_scale.spanOctaves.toInt()}OCT';
+
   void _setupChorus() {
-    // Layout: 3 Rows (Bleachers)
-    // Back Row (Bass): High up on screen, smaller, low pitch range
-    // Mid Row (Tenor/Alto): Middle, medium size, mid pitch range
-    // Front Row (Soprano): Bottom, large, high pitch range
-    
-    // Row 1: Bass (Top, Back)
-    _createRow(
-      count: 6,
-      yPos: size.y * 0.45,
-      scale: 0.6,
-      minPitch: 0.0,
-      maxPitch: 0.4,
-    );
-    
-    // Row 2: Mids (Middle)
-    _createRow(
-      count: 5,
-      yPos: size.y * 0.65,
-      scale: 0.8,
-      minPitch: 0.3,
-      maxPitch: 0.7,
-    );
-    
-    // Row 3: Soprano (Front, Bottom)
-    _createRow(
-      count: 4,
-      yPos: size.y * 0.85,
-      scale: 1.0,
-      minPitch: 0.6,
-      maxPitch: 1.0,
-    );
-    
-    // Add all to game
+    _createRow(count: 6, yPos: size.y * 0.40, scale: 0.6, minPitch: 0.0, maxPitch: 0.4);
+    _createRow(count: 5, yPos: size.y * 0.58, scale: 0.8, minPitch: 0.3, maxPitch: 0.7);
+    _createRow(count: 4, yPos: size.y * 0.76, scale: 1.0, minPitch: 0.6, maxPitch: 1.0);
     addAll(_musicians);
   }
-  
+
   void _createRow({
-    required int count, 
-    required double yPos, 
+    required int count,
+    required double yPos,
     required double scale,
     required double minPitch,
     required double maxPitch,
@@ -135,25 +165,21 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
     final rowWidth = size.x * 0.8;
     final spacing = rowWidth / (count + 1);
     final startX = (size.x - rowWidth) / 2 + spacing;
-    
+
     for (int i = 0; i < count; i++) {
-        // Assign a specific "center pitch" for this pet within the row's range
-        final rowRange = maxPitch - minPitch;
-        final petPitchCenter = minPitch + (rowRange * (i / (count - 1)));
-        
-        // Define their comfortable range around that center
-        final petMin = (petPitchCenter - 0.15).clamp(0.0, 1.0);
-        final petMax = (petPitchCenter + 0.15).clamp(0.0, 1.0);
-        
-        final musician = PetMusician(
-            petStats: petStats,
-            pitch: petPitchCenter,
-            minPitchRange: petMin,
-            maxPitchRange: petMax,
-            position: Vector2(startX + (spacing * i), yPos),
-            size: Vector2(100, 116) * scale, // Base size scaled
-        );
-        _musicians.add(musician);
+      final rowRange = maxPitch - minPitch;
+      final petPitchCenter = minPitch + (rowRange * (i / (count - 1)));
+      final petMin = (petPitchCenter - 0.15).clamp(0.0, 1.0);
+      final petMax = (petPitchCenter + 0.15).clamp(0.0, 1.0);
+
+      _musicians.add(PetMusician(
+        petStats: petStats,
+        pitch: petPitchCenter,
+        minPitchRange: petMin,
+        maxPitchRange: petMax,
+        position: Vector2(startX + (spacing * i), yPos),
+        size: Vector2(100, 116) * scale,
+      ));
     }
   }
 
@@ -161,16 +187,9 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
     cleanup();
     onExit();
   }
-  
-  // --- AUDIO LOGIC ---
-  
-  double _getFrequencyFromPitch(double pitch) {
-    // Exponential interpolation
-    final logMin = math.log(minFrequency);
-    final logMax = math.log(maxFrequency);
-    return math.exp(logMin + pitch * (logMax - logMin));
-  }
-  
+
+  // --- AUDIO ---
+
   void _updateAudio() {
     if (_currentVolume < 0.05) {
       if (_isPlaying) {
@@ -178,84 +197,45 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
         _isPlaying = false;
       }
     } else {
-      final freq = _getFrequencyFromPitch(_currentPitch);
       if (!_isPlaying) {
-        _mainPlayer.startTone(freq, _currentVolume);
+        _mainPlayer.startTone(_currentFrequency, _currentVolume);
         _isPlaying = true;
       } else {
-        _mainPlayer.setFrequency(freq, _currentVolume);
+        _mainPlayer.setFrequency(_currentFrequency, _currentVolume);
       }
     }
-    
-    // Update Musician States
+
     for (final musician in _musicians) {
-      musician.updateSingingState(_currentPitch, _currentVolume);
+      musician.updateSingingState(_currentPitchNorm, _currentVolume);
     }
   }
 
-  // --- INPUT HANDLING ---
+  // --- INPUT ---
 
   void _onTelemetry(TelemetryData data) {
-    if (!_isCalibrated) {
-      _calibrationOffset = Vector2(data.ax, data.ay);
-      _smoothedMotion = Vector2.zero();
-      _isCalibrated = true;
+    final now = DateTime.now();
+    final dt = _lastSample == null
+        ? 0.02
+        : (now.difference(_lastSample!).inMicroseconds / 1e6).clamp(0.001, 0.1);
+    _lastSample = now;
+
+    _height.update(data, dt);
+    // Adopt the first stable pose as neutral; the CALIB button re-zeros later.
+    if (!_height.isCalibrated) {
+      _height.calibrate();
       return;
     }
-    
-    // Raw relative tilt
-    final rawX = data.ax - _calibrationOffset.x; // Left/Right tilt
-    final rawY = data.ay - _calibrationOffset.y; // Forward/Back tilt
-    
-    // Smooth it
-    _smoothedMotion.x = _smoothedMotion.x + smoothingFactor * (rawX - _smoothedMotion.x);
-    _smoothedMotion.y = _smoothedMotion.y + smoothingFactor * (rawY - _smoothedMotion.y);
-    
-    // Map to Game State
-    // Tilt X -> Pitch
-    // Range approx -0.5 to 0.5 -> 0.0 to 1.0
-    _currentPitch = ((_smoothedMotion.x / 0.6) + 0.5).clamp(0.0, 1.0);
-    
-    // Tilt Y -> Volume
-    // Range approx -0.5 to 0.5 -> 0.0 to 1.0
-    // Tilting BACK (positive Y usually) should be Higher Volume? Or Forward?
-    // Let's say tilting AWAY (top of phone goes down, Y decreases?) is volume up.
-    // Actually, usually Y is gravity. Flat = 0.
-    // Let's just map standard -0.5 to 0.5.
-    // Let's make: Tilt Right (X > 0) = High Pitch.
-    // Tilt Up/Back (Y < 0) = High Volume.
-    
-    // Mapping: 
-    // Y < 0 (Tilted away) -> Volume 1.0
-    // Y > 0 (Tilted towards) -> Volume 0.0
-    _currentVolume = ((_smoothedMotion.y / -0.8) + 0.5).clamp(0.0, 1.0);
-    
-    // Update Cursor Position for feedback
-    final screenX = _currentPitch * size.x;
-    final screenY = (1.0 - _currentVolume) * size.y; // High volume = Top of screen
-    _cursor.position = Vector2(screenX, screenY);
+
+    final h = _height.height;
+    _currentPitchNorm = h;
+    final freq = _scale.map(h).frequency;
+    _currentFrequency = _pitchLocked ? _lockedFrequency : freq;
+    _currentVolume = _height.swingEnergy;
+
+    // Vertical pitch indicator: high pitch = top of screen.
+    _cursor.position = Vector2(size.x / 2, (1.0 - h) * size.y);
   }
 
-  // Fallback Touch Controls
-  @override
-  void onDragUpdate(int pointerId, DragUpdateInfo info) {
-    // Only use touch if NO motion input detected recently? 
-    // Or just override. Let's override for debugging.
-    final pos = info.eventPosition.global;
-    _currentPitch = (pos.x / size.x).clamp(0.0, 1.0);
-    _currentVolume = 1.0 - (pos.y / size.y).clamp(0.0, 1.0);
-    
-    _cursor.position = pos;
-  }
-  
-  @override
-  void onTapDown(int pointerId, TapDownInfo info) {
-    final pos = info.eventPosition.global;
-    _currentPitch = (pos.x / size.x).clamp(0.0, 1.0);
-    _currentVolume = 1.0 - (pos.y / size.y).clamp(0.0, 1.0);
-    _cursor.position = pos;
-  }
-  
   @override
   void update(double dt) {
     super.update(dt);
@@ -266,17 +246,13 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
   void cleanup() {
     _mainPlayer.stopTone();
     _mainPlayer.dispose();
-    
-    // Stop all pet visuals
     for (final musician in _musicians) {
       musician.stopSinging();
     }
-    
-    // Cancel telemetry subscription
     _telemetrySub?.cancel();
     _telemetrySub = null;
   }
-  
+
   @override
   void onRemove() {
     cleanup();
@@ -284,14 +260,12 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
   }
 }
 
-
-
 /// Title display
 class TitleDisplay extends PositionComponent {
   final OrchestraGame game;
-  
+
   TitleDisplay({required this.game}) : super(position: Vector2(0, 20));
-  
+
   @override
   void render(Canvas canvas) {
     final textPainter = TextPainter(
@@ -312,22 +286,69 @@ class TitleDisplay extends PositionComponent {
   }
 }
 
+/// A small tap button rendering a dynamic label.
+class LabelButton extends PositionComponent with TapCallbacks {
+  final String Function() label;
+  final VoidCallback onPressed;
+  final Color color;
+
+  LabelButton({
+    required this.label,
+    required this.onPressed,
+    this.color = const Color(0xFF5C6BC0),
+    Vector2? position,
+    Vector2? size,
+  }) : super(position: position, size: size ?? Vector2(76, 34));
+
+  @override
+  void render(Canvas canvas) {
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.x, size.y),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(rrect, Paint()..color = color);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = const Color(0xFF000000)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+
+    final tp = TextPainter(
+      text: TextSpan(
+        text: label(),
+        style: const TextStyle(
+          color: Color(0xFFFFFFFF),
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'Monocraft',
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    tp.layout();
+    tp.paint(canvas, Offset((size.x - tp.width) / 2, (size.y - tp.height) / 2));
+  }
+
+  @override
+  void onTapUp(TapUpEvent event) => onPressed();
+}
+
 /// Exit button component
 class ExitButton extends PositionComponent with TapCallbacks {
   final VoidCallback onTap;
   final OrchestraGame game;
-  
-  ExitButton({required this.onTap, required this.game}) : super(
-    size: Vector2(80, 40),
-    anchor: Anchor.center,
-  );
-  
+
+  ExitButton({required this.onTap, required this.game})
+      : super(size: Vector2(80, 40), anchor: Anchor.center);
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
     position = Vector2(60, 50);
   }
-  
+
   @override
   void render(Canvas canvas) {
     final rrect = RRect.fromRectAndRadius(
@@ -335,11 +356,14 @@ class ExitButton extends PositionComponent with TapCallbacks {
       const Radius.circular(8),
     );
     canvas.drawRRect(rrect, Paint()..color = const Color(0xFFE57373));
-    canvas.drawRRect(rrect, Paint()
-      ..color = const Color(0xFF000000)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2);
-    
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = const Color(0xFF000000)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+
     final textPainter = TextPainter(
       text: const TextSpan(
         text: 'EXIT',
@@ -358,7 +382,7 @@ class ExitButton extends PositionComponent with TapCallbacks {
       Offset((size.x - textPainter.width) / 2, (size.y - textPainter.height) / 2),
     );
   }
-  
+
   @override
   void onTapUp(TapUpEvent event) {
     onTap();

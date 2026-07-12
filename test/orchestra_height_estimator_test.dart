@@ -94,6 +94,27 @@ void main() {
       expect(e.height, closeTo(0.5, 1e-6));
     });
 
+    test('swingEnergy: horizontal sweeping raises it, resting decays it', () {
+      final e = seeded(HeightMode.fused);
+      expect(e.swingEnergy, closeTo(0.0, 1e-9));
+      // Sweep: oscillate horizontal accel (X) around zero.
+      for (var i = 0; i < 60; i++) {
+        e.update(s(i.isEven ? 0.6 : -0.6, 0, 1), 0.01);
+      }
+      expect(e.swingEnergy, greaterThan(0.3));
+      // Stop: energy bleeds off.
+      feed(e, s(0, 0, 1), 120);
+      expect(e.swingEnergy, lessThan(0.1));
+    });
+
+    test('swingEnergy: pure vertical motion barely registers as swing', () {
+      final e = seeded(HeightMode.fused);
+      for (var i = 0; i < 40; i++) {
+        e.update(s(0, 0, i.isEven ? 0.4 : 1.6), 0.01); // vertical only
+      }
+      expect(e.swingEnergy, lessThan(0.2));
+    });
+
     test('mode selects a different signal from the same state', () {
       final e = seeded(HeightMode.angleOnly);
       // Tilt gradually so the per-step motion stays below the rest threshold:

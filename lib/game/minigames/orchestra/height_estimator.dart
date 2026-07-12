@@ -46,6 +46,13 @@ class HeightEstimator {
   /// Vertical displacement (m) that maps to a full half-range of integration.
   final double heightRangeMeters;
 
+  /// Horizontal linear-accel magnitude (g) that maps to full swing energy.
+  final double swingFullScaleG;
+
+  /// Envelope rise/fall rates for the swing energy (rises fast, falls slow).
+  final double swingAttack;
+  final double swingRelease;
+
   HeightEstimator({
     this.mode = HeightMode.fused,
     this.gravityAlpha = 0.9,
@@ -55,6 +62,9 @@ class HeightEstimator {
     this.restGyroThresh = 15.0,
     this.angleRangeRad = math.pi / 2,
     this.heightRangeMeters = 0.6,
+    this.swingFullScaleG = 0.8,
+    this.swingAttack = 0.3,
+    this.swingRelease = 0.05,
   });
 
   // Gravity estimate (g), low-pass of accel.
@@ -70,10 +80,15 @@ class HeightEstimator {
   double _vel = 0; // vertical velocity (m/s)
   double _disp = 0; // vertical displacement vs neutral (m)
   double _fusedNorm = 0.5;
+  double _swingEnv = 0; // smoothed horizontal-swing energy, 0..1
 
   bool get isCalibrated => _calibrated;
   double get displacementMeters => _disp;
   double get verticalVelocity => _vel;
+
+  /// Horizontal-swing energy in [0, 1] — how vigorously the arm is sweeping.
+  /// Drives the choir's volume/gate; independent of [height] (pitch).
+  double get swingEnergy => _swingEnv;
 
   static const double _g = 9.80665;
 
@@ -81,6 +96,7 @@ class HeightEstimator {
   // produce Infinity/NaN in the normalized output.
   double get _hRange => math.max(1e-6, heightRangeMeters);
   double get _aRange => math.max(1e-6, angleRangeRad);
+  double get _swingRange => math.max(1e-6, swingFullScaleG);
 
   /// Capture the current arm pose as neutral and zero the integrators.
   /// No-op until at least one sample has seeded the gravity estimate.
@@ -96,6 +112,7 @@ class HeightEstimator {
     _vel = 0;
     _disp = 0;
     _fusedNorm = 0.5;
+    _swingEnv = 0;
     _calibrated = true;
   }
 
@@ -122,7 +139,17 @@ class HeightEstimator {
     final atRest = linMag < restAccelThresh && gyroMag < restGyroThresh;
 
     // Vertical linear accel toward neutral "up", in m/s^2.
-    final vertAccel = (linX * _upX + linY * _upY + linZ * _upZ) * _g;
+    final dotUp = linX * _upX + linY * _upY + linZ * _upZ;
+    final vertAccel = dotUp * _g;
+
+    // Horizontal component (perpendicular to "up") drives the swing energy.
+    final hX = linX - dotUp * _upX;
+    final hY = linY - dotUp * _upY;
+    final hZ = linZ - dotUp * _upZ;
+    final horizMag = math.sqrt(hX * hX + hY * hY + hZ * hZ);
+    final swingTarget = (horizMag / _swingRange).clamp(0.0, 1.0);
+    final k = swingTarget > _swingEnv ? swingAttack : swingRelease;
+    _swingEnv += k * (swingTarget - _swingEnv);
 
     if (atRest) {
       _vel = 0; // zero-velocity update: the drift killer
