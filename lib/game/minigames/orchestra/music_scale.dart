@@ -97,7 +97,9 @@ class MusicScale {
     final root = _effectiveRoot;
     // floor, not ceil: the reachable range is [root, root + spanOctaves*12].
     // ceil would admit a note above the top that no height in [0,1] reaches.
-    final top = root + (spanOctaves * 12).floor();
+    // max(0, …) keeps top >= root so the root note is always present (a
+    // misconfigured spanOctaves <= 0 can't yield an empty list / crash map()).
+    final top = root + math.max(0, (spanOctaves * 12).floor());
     final notes = <int>[];
     for (int base = root; base <= top; base += 12) {
       for (final off in offsets) {

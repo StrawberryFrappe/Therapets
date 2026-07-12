@@ -63,6 +63,13 @@ void main() {
           greaterThan(narrow.map(1.0).nearestScaleMidi));
     });
 
+    test('spanOctaves <= 0 does not crash and keeps at least the root note', () {
+      final s = MusicScale(rootMidi: 48, spanOctaves: 0, snapStrength: 1.0);
+      expect(s.allowedNotes(), isNotEmpty);
+      expect(() => s.map(0.5), returnsNormally);
+      expect(s.map(0.5).nearestScaleMidi, 48);
+    });
+
     test('A4 = 440 Hz reference', () {
       expect(MusicScale.midiToFrequency(69), closeTo(440.0, 1e-6));
       expect(MusicScale.noteName(69), 'A4');

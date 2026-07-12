@@ -31,6 +31,10 @@ class HeightEstimator {
   /// Per-sample velocity leak; bounds integration drift between rest resets.
   final double velocityLeak;
 
+  /// Per-sample displacement leak (applied only while moving); stops `_disp`
+  /// growing without bound during continuous play that never fully rests.
+  final double dispLeak;
+
   /// Complementary gain pulling the fused estimate toward the angle anchor.
   final double complementaryK;
 
@@ -57,6 +61,7 @@ class HeightEstimator {
     this.mode = HeightMode.fused,
     this.gravityAlpha = 0.9,
     this.velocityLeak = 0.98,
+    this.dispLeak = 0.999,
     this.complementaryK = 0.02,
     this.restAccelThresh = 0.08,
     this.restGyroThresh = 15.0,
@@ -155,7 +160,9 @@ class HeightEstimator {
       _vel = 0; // zero-velocity update: the drift killer
     } else {
       _vel = _vel * velocityLeak + vertAccel * dt;
-      _disp += _vel * dt;
+      // Leak displacement while moving so it can't grow unbounded during
+      // continuous play; a true rest still freezes it (this branch is skipped).
+      _disp = _disp * dispLeak + _vel * dt;
     }
 
     // Complementary fuse: integrate, then correct toward the angle anchor.
@@ -167,7 +174,14 @@ class HeightEstimator {
 
   double _angleNorm() {
     final pitch = math.atan2(_gravX, _gravZ);
-    final elevation = pitch - _neutralPitch;
+    var elevation = pitch - _neutralPitch;
+    // Unwrap across the atan2 branch cut so a wrist rotation past ±pi doesn't
+    // glitch the estimate by a full 2*pi jump.
+    if (elevation > math.pi) {
+      elevation -= 2 * math.pi;
+    } else if (elevation < -math.pi) {
+      elevation += 2 * math.pi;
+    }
     return (0.5 + 0.5 * elevation / _aRange).clamp(0.0, 1.0);
   }
 

@@ -62,15 +62,18 @@ class OrchestraGame extends FlameGame {
   bool _pitchLocked = false;
   double _lockedFrequency = 220.0;
 
-  // Audible pitch band; keeps playback rate sane regardless of octave/span combo.
-  static const double _minFreq = 55.0;
-  static const double _maxFreq = 2000.0;
+  // Pitch band = exactly what TonePlayer can sound, so the note shown matches
+  // what's heard (no silent second clamp collapsing distinct notes to one).
+  double get _minFreq => TonePlayer.minFrequency;
+  double get _maxFreq => TonePlayer.maxFrequency;
 
   // Sample timing for the estimator.
   DateTime? _lastSample;
   // Consecutive near-still samples before the first auto-calibration, so the
   // gravity baseline settles on a genuinely neutral pose.
   int _stillSamples = 0;
+  // True when telemetry has gone quiet mid-play (BLE dropped) — stops the drone.
+  bool _telemetryStale = false;
 
   OrchestraGame({
     required this.deviceService,
@@ -146,9 +149,10 @@ class OrchestraGame extends FlameGame {
     _scale.scale = values[(values.indexOf(_scale.scale) + 1) % values.length];
   }
 
-  // Clamp so the mapped notes stay musically sane (no absurd/negative pitch).
+  // Clamp so the mapped notes stay inside the audible band (no absurd pitch,
+  // no distinct notes collapsing onto the same rate-clamped drone).
   void _shiftOctave(int delta) =>
-      _scale.octaveShift = (_scale.octaveShift + delta).clamp(-3, 4).toInt();
+      _scale.octaveShift = (_scale.octaveShift + delta).clamp(-2, 3).toInt();
 
   void _cycleSpan() =>
       _scale.spanOctaves = _scale.spanOctaves >= 3 ? 1 : _scale.spanOctaves + 1;
@@ -169,6 +173,7 @@ class OrchestraGame extends FlameGame {
   /// A hint shown when the instrument can't be played yet, else null.
   String? get statusHint {
     if (!isDeviceConnected) return 'Connect a device in Settings to play';
+    if (_telemetryStale) return 'Signal lost — reconnect the device';
     if (!_height.isCalibrated) return 'Hold still — calibrating…';
     return null;
   }
@@ -256,8 +261,11 @@ class OrchestraGame extends FlameGame {
     // Auto-calibrate once the arm has been reasonably still for a moment, so the
     // neutral pose isn't captured mid-motion. The CALIB button re-zeros later.
     if (!_height.isCalibrated) {
+      // Require low rotation AND a plausible ~1g reading, so a garbage/zero
+      // packet can't seed a bad neutral pose.
       final gyroStill = data.gx.abs() + data.gy.abs() + data.gz.abs() < 45;
-      _stillSamples = gyroStill ? _stillSamples + 1 : 0;
+      final gravitySane = data.magnitude > 0.5 && data.magnitude < 2.0;
+      _stillSamples = (gyroStill && gravitySane) ? _stillSamples + 1 : 0;
       if (_stillSamples < 15) return;
       _height.calibrate();
       return;
@@ -276,6 +284,13 @@ class OrchestraGame extends FlameGame {
   @override
   void update(double dt) {
     super.update(dt);
+    // Watchdog: if telemetry has gone quiet (BLE dropped mid-play), stop the
+    // note draining out — otherwise the last frame's volume drones forever.
+    if (_lastSample != null) {
+      final ageMs = DateTime.now().difference(_lastSample!).inMilliseconds;
+      _telemetryStale = ageMs > 400;
+      if (_telemetryStale) _currentVolume = 0.0;
+    }
     // Glide the sounded pitch toward the target (portamento; also smooths the
     // discrete jumps at scale-snap boundaries).
     final t = (dt * 12.0).clamp(0.0, 1.0);

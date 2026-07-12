@@ -7,12 +7,20 @@ import 'package:audioplayers/audioplayers.dart';
 /// The 440 Hz sine buffer is generated once and looped; pitch is playback-rate,
 /// volume is player volume. Gating uses pause/resume (not stop/setSource) so the
 /// native source is prepared exactly once — no per-note re-prepare cost or clicks.
+///
+/// All public operations are serialized through a single Future chain. The game
+/// calls these every frame without awaiting, so without serialization an
+/// in-flight startTone() (whose native prepare is genuinely async) could be
+/// re-entered by a setFrequency() that sees `_isPlaying == false` and kicks off
+/// a second concurrent setSource/prepare on the same player — which throws and
+/// can wedge the tone silent for the session. The chain makes that impossible.
 class TonePlayer {
   final AudioPlayer _player = AudioPlayer();
   bool _isPlaying = false;
   bool _sourceReady = false;
   bool _disposed = false;
   Uint8List? _wav;
+  Future<void> _chain = Future<void>.value();
 
   static const int sampleRate = 44100;
   static const double bufferDuration = 2.0;
@@ -22,10 +30,22 @@ class TonePlayer {
   static const double _minRate = 0.25;
   static const double _maxRate = 4.0;
 
+  /// Lowest/highest frequency this player can actually sound (rate-bounded).
+  /// Callers should clamp to this so the note they display matches what's heard.
+  static double get minFrequency => baseFrequency * _minRate;
+  static double get maxFrequency => baseFrequency * _maxRate;
+
   TonePlayer();
 
   double _rateFor(double frequency) =>
       (frequency / baseFrequency).clamp(_minRate, _maxRate);
+
+  // Serialize every public op so unawaited calls can't interleave.
+  Future<void> _run(Future<void> Function() op) {
+    final next = _chain.then((_) => op());
+    _chain = next.then((_) {}, onError: (_) {});
+    return next;
+  }
 
   Future<void> _ensureSource() async {
     if (_sourceReady || _disposed) return;
@@ -36,7 +56,10 @@ class TonePlayer {
   }
 
   /// Start (or unpause) the tone at [frequency]/[volume].
-  Future<void> startTone(double frequency, double volume) async {
+  Future<void> startTone(double frequency, double volume) =>
+      _run(() => _doStart(frequency, volume));
+
+  Future<void> _doStart(double frequency, double volume) async {
     if (_disposed) return;
     try {
       await _ensureSource();
@@ -53,10 +76,13 @@ class TonePlayer {
   }
 
   /// Nudge pitch/volume while playing.
-  Future<void> setFrequency(double frequency, double volume) async {
+  Future<void> setFrequency(double frequency, double volume) =>
+      _run(() => _doSetFrequency(frequency, volume));
+
+  Future<void> _doSetFrequency(double frequency, double volume) async {
     if (_disposed) return;
     if (!_isPlaying) {
-      await startTone(frequency, volume);
+      await _doStart(frequency, volume);
       return;
     }
     try {
@@ -65,7 +91,9 @@ class TonePlayer {
     } catch (_) {}
   }
 
-  Future<void> setVolume(double volume) async {
+  Future<void> setVolume(double volume) => _run(() => _doSetVolume(volume));
+
+  Future<void> _doSetVolume(double volume) async {
     if (_disposed) return;
     try {
       await _player.setVolume(volume.clamp(0.0, 1.0));
@@ -73,7 +101,9 @@ class TonePlayer {
   }
 
   /// Silence the tone by pausing (keeps the prepared source for a fast restart).
-  Future<void> stopTone() async {
+  Future<void> stopTone() => _run(_doStop);
+
+  Future<void> _doStop() async {
     if (_disposed || !_isPlaying) return;
     _isPlaying = false;
     try {
@@ -83,7 +113,9 @@ class TonePlayer {
 
   bool get isPlaying => _isPlaying;
 
-  Future<void> dispose() async {
+  Future<void> dispose() => _run(_doDispose);
+
+  Future<void> _doDispose() async {
     if (_disposed) return;
     _disposed = true;
     _isPlaying = false;
