@@ -9,7 +9,35 @@
 >
 > **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (see note)
 >
-> _Last updated: 2026-07-02_
+> _Last updated: 2026-07-12_
+
+---
+
+## Deadline sprint — Monday 2026-07-13 (single-day, owner-driven)
+
+One waking day. **Mandatory before Monday night** — all require the S3 hardware, so they are
+**owner-only, cannot be delegated to an agent:**
+
+1. **SBR difficulty** — playtest each of the 4 levels on device. Extreme (0.15 bumper) under
+   real IMU tilt is the risk. (Code done 2026-07-11; only the golden-path run is left.)
+2. **Web allow-list** — drive the `TreatmentOverlay` HUD + an actually-filtered game menu on
+   running hardware. Everything is unit-tested; nothing has been seen on a real app.
+3. **Screen-off monitoring** — confirm telemetry/monitoring survives screen-off/Doze:
+   `adb dumpsys power` wakelock check + the usage-undercount (wakelock) fix under real idle.
+4. **(Maybe — only if it turns out needed) BLE robustness verify** on device. If not
+   surfaced as needed → slips to Tuesday.
+
+**Backend-dependent → coworkers (Monday):** does `patient_usage_time` derive server-side from
+telemetry or need an app write-back? No write-back exists today. (FACTORY #37/#38.)
+
+**Overnight agent (separate session, code-only, no device, no backend)** — preps Monday so the
+hardware time above is pure verify. Scope this era, strictly ordered: **(1) BLE robustness code
+pass (priority, deadline-relevant); (2) Orchestra — diagnose+propose, implement only a low-risk
+slice, ONLY if task 1 is done + green.** Separate branches off `unstable` (where current BLE +
+SBR work lives), local commits, **no push.**
+Owner reviews on wakeup. Brief lives in scratchpad this session.
+
+Anything not above (docs drift, sticky-type fix, full bug hunt) → not deadline work; Tuesday+.
 
 ---
 
