@@ -302,9 +302,8 @@ steps written; sticky-type swap re-tested.
 ---
 
 ### Phase 7 — Stretch (nice-to-have)
-- [ ] **Orchestra rework.** Owner: the movement-based cursor + gesture-as-orders attempt
-      "went horrible"; it's the biggest thing that works badly. Redesign the interaction
-      (`lib/game/minigames/orchestra/`) — simpler, reliable mapping — or scope it down.
+- [x] **Orchestra rework — superseded by §6 register.** Split into items 6.1–6.7 (2026-07-12);
+      6.1/6.3/6.4/6.5/6.6/6.7 done, 6.2 (input latency) deferred to GitHub issue #39. See §6.
 - [ ] **Full top-to-bottom bug hunt.** Systematic pass across all screens/services (owner
       explicitly wants this — later, not now). File findings as GitHub issues.
 
@@ -424,15 +423,12 @@ agentic drift given how many unrelated files this touches). Supersedes/details t
   with the rest of the page. Localized the 7 hardcoded-English strings via 7 new
   `AppLocalizations` keys (EN + ES) in `app_en.arb`/`app_es.arb`, `flutter gen-l10n` re-run.
 
-- [ ] **6.7 — SBR minigame assumes left-arm play, no handedness option.** Fixed sign convention,
-  not configurable: `motion_calibrator.dart:36` (`-data.ax` hardcoded roll sign), `:49-50`
-  `confirmLeft` / `:54-66` `confirmRight` two-phase calibration, `:74-84` `mapAngleToScreenX`
-  (left→left edge, right→right edge); `calibration_overlay.dart:14-15,59-60,63-66` (UI prompts
-  "tilt wrist max left" then "max right"); `sbr_game.dart:87-94 _onTelemetry` applies roll→screenX
-  with no inversion. Confirmed no existing handedness/invert/mirror setting anywhere in `lib/`
-  (`game_settings.dart` only has `sbrUpwardSpeedMultiplier`, `orchestraHeightMode`). Fix shape:
-  add a handedness field to `GameSettings` + invert the roll sign / swap calibration-phase
-  labels in `motion_calibrator.dart`. Medium, 1 session, needs device testing both-handed.
+- [x] **6.7 — SBR minigame assumes left-arm play, no handedness option — DONE 2026-07-13.**
+  Added handedness field to `GameSettings`, wired through `motion_calibrator.dart`,
+  `calibration_overlay.dart`, and `sbr_game.dart` (roll-sign inversion + calibration-pose
+  labels/images). Follow-up commit `13889d6` swapped calibration pose images instead of
+  mirroring pixels for the right-arm board. Needs device testing both-handed (not yet verified
+  on hardware, same caveat pattern as 6.1/6.4/6.5).
 
 **Acceptance for this register:** each item above is independently pickable in its own
 session/workflow slice; none has been implemented yet. Owner to prioritize/sequence at next
