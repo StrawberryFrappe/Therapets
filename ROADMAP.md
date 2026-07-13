@@ -9,7 +9,54 @@
 >
 > **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (see note)
 >
-> _Last updated: 2026-07-02_
+> _Last updated: 2026-07-13_
+
+---
+
+## Landed 2026-07-13 — Telemetry contract v2 (branch `feat/telemetry-contract-v2` → `unstable`)
+
+Mobile-side fixes from the `prosthetic-api` telemetry review (§1–10). Envelope is now
+single-`payload` ThingsBoard shape (`ts` + `values.payload`) with `eventType`/`eventId`
+inside; native `CloudManager` queue is bounded (5000), batched (≤50) with exponential
+backoff + connectivity-triggered flush; `mission_completed` is native-only (killed the
+Dart double-publish); synced tally uses no-grace clinical presence (enforces ADR-0007);
+GY906 sends `avgTemp`; UI shows the real native queue; base-URL host validation added.
+Wire format + native details in `docs/telemetria.md` / `docs/en/telemetry.md` and
+`docs/capa_nativa.md` / `docs/en/native_layer.md`; ADR-0007 addendum.
+
+- [!] **Backend lockstep required.** The single-`payload` envelope needs `prosthetic-api`
+      updated in the same deploy — old backend can't read it. Coordinate before shipping.
+- [x] Closes #40 (dead Dart sync code) and #41 (unbounded native queue).
+- [ ] Real-hardware/live-ThingsBoard verification of the offline→correct-clinical-day path
+      still outstanding (gated on the backend deploy above).
+
+---
+
+## Deadline sprint — Monday 2026-07-13 (single-day, owner-driven)
+
+One waking day. **Mandatory before Monday night** — all require the S3 hardware, so they are
+**owner-only, cannot be delegated to an agent:**
+
+1. **SBR difficulty** — playtest each of the 4 levels on device. Extreme (0.15 bumper) under
+   real IMU tilt is the risk. (Code done 2026-07-11; only the golden-path run is left.)
+2. **Web allow-list** — drive the `TreatmentOverlay` HUD + an actually-filtered game menu on
+   running hardware. Everything is unit-tested; nothing has been seen on a real app.
+3. **Screen-off monitoring** — confirm telemetry/monitoring survives screen-off/Doze:
+   `adb dumpsys power` wakelock check + the usage-undercount (wakelock) fix under real idle.
+4. **(Maybe — only if it turns out needed) BLE robustness verify** on device. If not
+   surfaced as needed → slips to Tuesday.
+
+**Backend-dependent → coworkers (Monday):** does `patient_usage_time` derive server-side from
+telemetry or need an app write-back? No write-back exists today. (FACTORY #37/#38.)
+
+**Overnight agent (separate session, code-only, no device, no backend)** — preps Monday so the
+hardware time above is pure verify. Scope this era, strictly ordered: **(1) BLE robustness code
+pass (priority, deadline-relevant); (2) Orchestra — diagnose+propose, implement only a low-risk
+slice, ONLY if task 1 is done + green.** Separate branches off `unstable` (where current BLE +
+SBR work lives), local commits, **no push.**
+Owner reviews on wakeup. Brief lives in scratchpad this session.
+
+Anything not above (docs drift, sticky-type fix, full bug hunt) → not deadline work; Tuesday+.
 
 ---
 
@@ -101,22 +148,29 @@ policy written (ADR-0009); `docs/adr/` exists; `FACTORY.md` refreshed.
 
 ---
 
-### Phase 2 — #4 SBR difficulty selector (hard must-ship)
-Self-contained win. Copy the pattern already proven in Flappy Bird.
+### Phase 2 — #4 SBR difficulty selector (hard must-ship) — **CODE DONE 2026-07-11**
+Self-contained win. Copied the pattern already proven in Flappy Bird.
 
-- [ ] Model SBR difficulty on `lib/game/minigames/flappy_bird/flappy_difficulty.dart`
-      (`FlappyDifficulty` enum + `FlappyDifficultyConfig` preset map: easy/medium/hard/extreme).
-- [ ] Identify SBR tunables in `lib/game/minigames/sbr/sbr_game.dart` (ball speed, brick
-      rows/layout, bumper size, power-up rate, speed ramp) and factor them into a
-      `SbrDifficultyConfig`.
-- [ ] Add difficulty picker UI in `sbr_screen.dart` (mirror Flappy's selector; reuse
-      numbered 1–4 labels — see FACTORY note about not discouraging young players).
-- [ ] Localize new strings in `lib/l10n/app_en.arb` + `app_es.arb` and regenerate
-      (`flutter gen-l10n`).
-- [ ] Test: `flutter test`; manual golden-path run of SBR at each level.
+- [x] `SbrDifficulty` enum + `SbrDifficultyConfig` preset map (easy/medium/hard/extreme) in
+      new `lib/game/minigames/sbr/sbr_difficulty.dart`, mirroring `flappy_difficulty.dart`.
+- [x] SBR tunables factored into the config — **owner's chosen knobs:** bumper width
+      (0.32→0.15), starting lives (5/4/3/3, **floored at 3** — hard/extreme never below the
+      base), per-hit speed ramp + cap, helpful-brick spawn bonus (more powerups on easy).
+      Ball base speed left at 300 for all; **stacks on top of** the existing per-level curve
+      (grid/HP growth untouched). Coins mirror Flappy 1/1/2/4.
+- [x] Difficulty picker UI in `sbr_screen.dart` — title/difficulty overlay before game build,
+      1–4 `SegmentedButton` (star icons, numbered per FACTORY young-player note), choice
+      persisted to SharedPreferences (`sbr_difficulty`). Game now built lazily on Start.
+- [x] Strings: reused existing `gameSbr` + `difficultyEasy/Medium/Hard/Extreme` — no new
+      difficulty strings needed. (A `sbrCalibrationStep` key was added for the separate
+      calibration-overlay redesign, not this feature.)
+- [x] `flutter test` green (57 pass; added `test/sbr_difficulty_test.dart` preset invariants).
+      `flutter analyze` clean.
+- [ ] **Manual golden-path run of SBR at each level — DEFERRED to owner's verification sweep.**
+      Not driven on device yet; extreme (0.15 bumper) under IMU tilt needs a playtest.
 
-**Acceptance:** SBR launches with a 1–4 difficulty picker; each level measurably differs;
-ES/EN strings present; tests pass.
+**Acceptance:** ✅ 1–4 picker + measurably-different presets + ES/EN + tests. ⚠️ Manual
+per-level playtest outstanding (owner sweep). Values are one-line tweaks in `sbr_difficulty.dart`.
 
 ---
 
@@ -267,9 +321,8 @@ steps written; sticky-type swap re-tested.
 ---
 
 ### Phase 7 — Stretch (nice-to-have)
-- [ ] **Orchestra rework.** Owner: the movement-based cursor + gesture-as-orders attempt
-      "went horrible"; it's the biggest thing that works badly. Redesign the interaction
-      (`lib/game/minigames/orchestra/`) — simpler, reliable mapping — or scope it down.
+- [x] **Orchestra rework — superseded by §6 register.** Split into items 6.1–6.7 (2026-07-12);
+      6.1/6.3/6.4/6.5/6.6/6.7 done, 6.2 (input latency) deferred to GitHub issue #39. See §6.
 - [ ] **Full top-to-bottom bug hunt.** Systematic pass across all screens/services (owner
       explicitly wants this — later, not now). File findings as GitHub issues.
 
@@ -296,3 +349,106 @@ _(Branch strategy resolved: `main` stable / `dev` nightly / `unstable` experimen
 - Local storage = SharedPreferences atomic JSON bundles. **Hive forbidden.**
 - No `permission_handler`; use platform prompts.
 - State management = `provider`.
+
+---
+
+## 6. Orchestra/Theremin + Advanced Settings — backlog register (2026-07-12)
+
+Owner playtest on latest `unstable` build surfaced 7 distinct issues. **Investigation only —
+not fixed this session.** Deliberately split into separate items so each can be picked up in
+its own session/dynamic-workflow slice instead of one broad sweep (risk of context corruption /
+agentic drift given how many unrelated files this touches). Supersedes/details the terse
+"Orchestra rework" stretch bullet in Phase 7 above.
+
+- [x] **6.1 — Orchestra settings audit — DONE 2026-07-12.** Confirmed all 20 constants below are
+  still live (MIDI root/span/snap, freq clamp band, audio gate hysteresis, change-detection
+  thresholds, auto-calibrate hysteresis, telemetry watchdog, glide factor in `orchestra_game.dart`;
+  complementary-filter/swing constants in `height_estimator.dart`; buffer/rate bounds in
+  `tone_player.dart`). **Verdict: audit-only, no new UI added.** All 20 are DSP/audio-engine
+  internals (filter coefficients, hysteresis bands, buffer sizes, watchdog timers) — none read as
+  a genuine player-facing setting the way `orchestraHeightMode` (`settings_page.dart`, the one
+  existing control) does; exposing them would let a player break the instrument into an unusable
+  state, not tune it. Closed as audit-complete; revisit only if a specific control is requested.
+  - `orchestra_game.dart:42-46` — `MusicScale` root MIDI (57) / span octaves (2) / snap
+    strength (0.85)
+  - `orchestra_game.dart:151-152` — frequency clamp band (MIDI 45–93)
+  - `orchestra_game.dart:245` — audio gate hysteresis (0.03/0.06)
+  - `orchestra_game.dart:257-258` — change-detection thresholds (0.5 Hz / 0.01 vol)
+  - `orchestra_game.dart:285-288` — auto-calibrate hysteresis (45°/s gyro, 0.5–2.0g, 15-sample)
+  - `orchestra_game.dart:310` — telemetry stale watchdog (400ms)
+  - `orchestra_game.dart:315` — glide factor (dt×12.0)
+  - `height_estimator.dart:60-73` — gravityAlpha/velocityLeak/dispLeak/complementaryK/swing
+    attack-release/angle+height range constants
+  - `tone_player.dart:26-32` — sample rate, buffer duration, base freq, playback-rate bounds
+
+- [!] **6.2 — Orchestra input latency — DEFERRED, moved to GitHub issue #39.** Owner call
+  2026-07-12: not blocking (nothing breaks, just feels slow), boss won't care — pull off the
+  active queue, leave for a later batch/next person. Pipeline trace + file:line detail kept
+  here (not duplicated in the public issue): `device_service.dart:241-248` telemetry stream →
+  `orchestra_game.dart:272-301 _onTelemetry` (per BLE packet, ~50-100ms typical) →
+  `height_estimator.dart:125-173 update(dt)` (gravity LPF α0.9, complementary fusion K0.02,
+  swing attack/release 0.3/0.05) → `music_scale.dart:115-140 map(h)` (snap 0.85) →
+  `orchestra_game.dart:304-318 update(dt)` per-frame glide (dt×12.0) + hysteresis →
+  `tone_player.dart:50-54 _run()` Future-chain-serialized platform channel calls
+  (`_doStart` at 68-82). Needs on-device latency measurement before touching anything.
+
+- [x] **6.3 — Rename display "Orchestra" → "Theremin" — DONE 2026-07-12.** Renamed:
+  `orchestra_screen.dart:48` title, `orchestra_game.dart:351` in-game title text,
+  `l10n/app_en.arb`/`app_es.arb` `gameOrchestra` (also added the previously-missing ES
+  `gameOrchestraDesc`), `game_menu.dart` menu entry label, plus the "Orchestra Height Sensing"
+  card title/description in `settings_page.dart` (now localized, see 6.6 — landed as "Theremin
+  Height Sensing" / "Detección de Altura del Theremín"). `flutter gen-l10n` re-run. Kept as-is
+  (internal): `OrchestraGame`/`OrchestraScreen` classes, `orchestraHeightMode` field,
+  `'orchestra'` game-ID routing string, directory name, `HeightMode`/`ScaleType` enums.
+
+- [x] **6.4 — Orchestra UI rebuild from scratch — DONE 2026-07-12.** Root cause of the
+  "controls aren't reachable" report: every HUD element (title, status hint, CALIB/LOCK/
+  scale/octave/span buttons, EXIT) was hand-drawn as Flame `PositionComponent`s painting
+  directly to `Canvas` (`orchestra_game.dart`, old `TitleDisplay`/`StatusHint`/`LabelButton`/
+  `ExitButton`), with the bottom control row placed at a raw `size.y - h - 8` pixel offset —
+  no `SafeArea`/system-inset awareness, so it could land under the landscape gesture-nav bar.
+  Also 100% hardcoded English, zero l10n, inconsistent with 6.6. Rebuilt as a real Flutter
+  widget overlay (`orchestra_screen.dart`, using the `MinigameScreen.overlay` mechanism already
+  established by `flappy_bird_screen.dart`) wrapped in `SafeArea`, with proper Material buttons
+  and a `ValueListenableBuilder` driven by a new `OrchestraGame.uiRevision` notifier that only
+  fires on real state changes (calibrate/lock/scale/octave/span/status), not every frame. Flame
+  now only renders the stage (background, `MotionCursor`, singing `PetMusician`s) — no
+  interactive components left in the canvas. Added 12 new EN/ES l10n keys for every control
+  label and status hint that was previously raw English; `flutter gen-l10n` re-run. `OrchestraGame`
+  control methods de-privatized (`calibrate`, `toggleLock`, `cycleScale`, `shiftOctave`,
+  `cycleSpan`, `exitGame`) so the overlay can call them directly; height/scale/audio DSP logic
+  untouched. `flutter analyze` clean, `flutter test` 79/79 green. **No widget test added** — this
+  repo has zero screen-widget-test precedent, and `OrchestraScreen`'s `MinigameScreen` wrapper
+  hits unmocked platform channels (`wakelock_plus`) under `flutter test`; relied on analyze +
+  full suite + adversarial code review instead. **Not yet verified on a real device** — whether
+  the bottom bar now actually clears the gesture-nav area in landscape and controls register taps
+  needs an on-device pass, same caveat pattern as 6.1/6.5.
+
+- [x] **6.5 — Advanced Settings: wrong sensor button shown — FIXED 2026-07-12, unverified on
+  hardware.** Root cause confirmed: two premature `_deviceType = DeviceType.max30100` writes in
+  `device_service.dart` (one in the native-BPM listener, one in `init()`'s post-connect re-verify
+  block) raced ahead of the correct packet-size sniff (`:252-258`, 16 bytes→max30100 /
+  14 bytes→gy906), so a GY906 (temp) device receiving a native BPM value before its first raw
+  packet got locked to `max30100`. Neither write was needed — `_tryPreSeed()`, the only thing
+  those callbacks feed, never reads `_deviceType`. Both removed; packet-size sniff is now the
+  sole source of truth, matching the field's own "sticky - determined by first packet" comment.
+  `flutter analyze`/`flutter test` (79 tests) clean. **Not yet re-tested on real GY906 hardware**
+  — do this during the Phase 6 S3 verification pass (device-switch sticky-type re-test item).
+
+- [x] **6.6 — Advanced Settings: black cards clash + English-only — DONE 2026-07-12.** Removed
+  hardcoded `Colors.grey[900]` from the 3 Cards (SBR Upward Speed / Lenient Sensor Mode /
+  Theremin Height Sensing) and the Raw Data Terminal button (+ its paired
+  `foregroundColor: Colors.white`) — all now inherit the app's default light theme, consistent
+  with the rest of the page. Localized the 7 hardcoded-English strings via 7 new
+  `AppLocalizations` keys (EN + ES) in `app_en.arb`/`app_es.arb`, `flutter gen-l10n` re-run.
+
+- [x] **6.7 — SBR minigame assumes left-arm play, no handedness option — DONE 2026-07-13.**
+  Added handedness field to `GameSettings`, wired through `motion_calibrator.dart`,
+  `calibration_overlay.dart`, and `sbr_game.dart` (roll-sign inversion + calibration-pose
+  labels/images). Follow-up commit `13889d6` swapped calibration pose images instead of
+  mirroring pixels for the right-arm board. Needs device testing both-handed (not yet verified
+  on hardware, same caveat pattern as 6.1/6.4/6.5).
+
+**Acceptance for this register:** each item above is independently pickable in its own
+session/workflow slice; none has been implemented yet. Owner to prioritize/sequence at next
+review — not implied to follow the 6.1→6.7 order above.

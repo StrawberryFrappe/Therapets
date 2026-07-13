@@ -4,6 +4,7 @@
 import 'package:flutter/foundation.dart';
 
 
+import '../game/game_settings.dart';
 import '../game/missions/mission_service.dart';
 import '../game/pets/pet_stats.dart';
 import '../services/cloud/cloud_service.dart';
@@ -39,6 +40,14 @@ class AppBootstrapper {
   static Future<BootstrapResult> init() async {
     debugPrint('[Bootstrapper] STARTING');
 
+    // Load persisted game settings (presence mode, orchestra height mode, …) so
+    // they apply from launch, not only after the Settings screen is opened.
+    try {
+      await GameSettings.load();
+    } catch (e) {
+      debugPrint('[Bootstrapper] GameSettings load failed: $e');
+    }
+
     // 1. Initialize Services (Leaf dependencies first)
     final localeService = LocaleService();
     try {
@@ -68,16 +77,26 @@ class AppBootstrapper {
     petStats.markReady();
 
     // 3. Initialize Services that depend on others
-    final missionService = MissionService(cloudService: cloudService);
+    // TreatmentService's cached quota (usageTimeSeconds) feeds the Sync Master
+    // mission target, so its local-cache load must land before
+    // MissionService.init() generates today's missions.
+    final treatmentService = TreatmentService();
+    try {
+      await treatmentService.init().timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('[Bootstrapper] TreatmentService init failed: $e');
+    }
+
+    final missionService = MissionService();
     try {
       await missionService.init(petStats).timeout(const Duration(seconds: 5));
-      
+
       // Rehydrate background progress for missions (e.g. sync duration)
       final lastUpdateMs = petStats.lastUpdateTime.millisecondsSinceEpoch;
       final now = DateTime.now().millisecondsSinceEpoch;
       final elapsedSec = (now - lastUpdateMs) / 1000.0;
       final isSynced = deviceService.currentDisplayStatus == DeviceDisplayStatus.synced;
-      
+
       await missionService.rehydrateBackgroundProgress(elapsedSec, isSynced);
     } catch (e) {
       debugPrint('[Bootstrapper] MissionService init failed: $e');
@@ -85,12 +104,6 @@ class AppBootstrapper {
 
     final notificationService = PetNotificationService(localeService: localeService);
 
-    final treatmentService = TreatmentService();
-    try {
-      await treatmentService.init().timeout(const Duration(seconds: 3));
-    } catch (e) {
-      debugPrint('[Bootstrapper] TreatmentService init failed: $e');
-    }
     // Fire-and-forget network fetch — don't let a slow/unreachable backend
     // stall app launch; the menu falls back to fail-open until this lands.
     treatmentService.refresh();

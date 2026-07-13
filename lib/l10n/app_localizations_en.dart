@@ -135,7 +135,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gameFlappyBobDesc => 'Shake or tap to fly!';
 
   @override
-  String get gameOrchestra => 'Orchestra';
+  String get gameOrchestra => 'Theremin';
 
   @override
   String get gameOrchestraDesc => 'Make your pets sing!';
@@ -499,4 +499,81 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sbrCalibrationRight => 'Turn wrist max right and tap to confirm';
+
+  @override
+  String sbrCalibrationStep(int current, int total) {
+    return 'Step $current of $total';
+  }
+
+  @override
+  String get sbrUpwardSpeedTitle => 'SBR Upward Speed';
+
+  @override
+  String get sbrUpwardSpeedDesc =>
+      'Make the ball ascend faster than it descends. Adjust to taste.';
+
+  @override
+  String get lenientSensorModeTitle => 'Lenient Sensor Mode';
+
+  @override
+  String get lenientSensorModeDesc =>
+      'Enable ONLY for old devices whose firmware turns the sensor on and off every ~10s to save battery. Off (default) = new always-on firmware, faster and more accurate presence.';
+
+  @override
+  String get lenientSensorModeSwitch => 'Lenient (old battery-saving firmware)';
+
+  @override
+  String get orchestraHeightSensingTitle => 'Theremin Height Sensing';
+
+  @override
+  String get orchestraHeightSensingDesc =>
+      'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.';
+
+  @override
+  String get sbrHandednessTitle => 'SBR Handedness';
+
+  @override
+  String get sbrHandednessDesc =>
+      'Which arm\'s board you have. The right-arm board is a mirror image, so this flips the tilt sensing to match. Off (default) = left-arm board.';
+
+  @override
+  String get sbrHandednessSwitch => 'Right-arm board';
+
+  @override
+  String get orchestraCalibrate => 'Calibrate';
+
+  @override
+  String get orchestraLock => 'Lock';
+
+  @override
+  String get orchestraLocked => 'Locked';
+
+  @override
+  String get orchestraScalePentatonic => 'Pentatonic';
+
+  @override
+  String get orchestraScaleDiatonic => 'Diatonic';
+
+  @override
+  String get orchestraScaleChromatic => 'Chromatic';
+
+  @override
+  String get orchestraOctaveDown => 'Lower octave';
+
+  @override
+  String get orchestraOctaveUp => 'Raise octave';
+
+  @override
+  String orchestraSpanLabel(int n) {
+    return '$n octave range';
+  }
+
+  @override
+  String get orchestraHintNoDevice => 'Connect a device in Settings to play';
+
+  @override
+  String get orchestraHintSignalLost => 'Signal lost — reconnect the device';
+
+  @override
+  String get orchestraHintCalibrating => 'Hold still — calibrating…';
 }

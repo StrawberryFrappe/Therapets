@@ -6,6 +6,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/painting.dart';
 
 import '../../../services/device/device_service.dart';
+import '../../game_settings.dart';
 import '../../pets/pet_stats.dart';
 
 import 'ball.dart';
@@ -13,6 +14,7 @@ import 'brick.dart';
 import 'bumper.dart';
 import 'motion_calibrator.dart';
 import 'power_up.dart';
+import 'sbr_difficulty.dart';
 
 /// SBR minigame main Game class.
 class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCallbacks {
@@ -21,10 +23,11 @@ class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCa
   final VoidCallback onGameOver;
   final VoidCallback? onStateChanged;
   final bool isDeviceConnected;
-  
+  final SbrDifficultyConfig difficultyConfig;
+
   // Game State
   int score = 0;
-  int lives = 3;
+  int lives;
   int currentLevel = 1;
   int combo = 0;
   bool isGameOver = false;
@@ -46,9 +49,10 @@ class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCa
     required this.deviceService,
     required this.petStats,
     required this.onGameOver,
+    required this.difficultyConfig,
     this.isDeviceConnected = false,
     this.onStateChanged,
-  });
+  }) : lives = difficultyConfig.startingLives;
 
   @override
   Color backgroundColor() => const Color(0xFF222222);
@@ -69,7 +73,7 @@ class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCa
 
   void _initBumper() {
     bumper = Bumper(
-      size: Vector2(size.x * 0.25, size.y * 0.02),
+      size: Vector2(size.x * difficultyConfig.bumperWidthFactor, size.y * 0.02),
       position: Vector2(size.x / 2, size.y * 0.9),
       game: this,
     );
@@ -85,7 +89,10 @@ class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCa
     if (calibrator == null || calibrator!.state != CalibrationState.done) return;
     if (!hasStarted || isGameOver) return;
 
-    final roll = MotionCalibrator.rollFromTelemetry(data);
+    final roll = MotionCalibrator.rollFromTelemetry(
+      data,
+      handedness: GameSettings.sbrHandedness,
+    );
     final screenX = calibrator!.mapAngleToScreenX(roll, size.x, bumper.size.x);
     bumper.setPositionX(screenX);
   }
@@ -222,8 +229,9 @@ class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCa
     isGameOver = true;
     _eventSub?.cancel();
     
-    // Award coins
-    petStats.addSilver(score ~/ 100); 
+    // Award coins (difficulty multiplier mirrors Flappy: 1/1/2/4).
+    // Multiply before truncating so 2x/4x don't lose the fractional payout.
+    petStats.addSilver((score / 100 * difficultyConfig.coinMultiplier).toInt());
     
     onStateChanged?.call();
     onGameOver();

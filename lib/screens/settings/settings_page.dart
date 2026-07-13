@@ -7,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../services/device/device_service.dart';
 import '../../services/cloud/cloud_service.dart';
 import '../../game/virtual_pet_game.dart';
+import '../../game/missions/mission_service.dart';
 import '../pulse_oximeter/pulse_oximeter_screen.dart';
 import '../temperature_sensor/temperature_sensor_screen.dart';
 import 'token_scanner_page.dart';
@@ -19,6 +20,8 @@ import 'sections/debug_section.dart';
 import 'sections/app_updates_section.dart';
 import '../../services/update_service.dart';
 import '../../game/game_settings.dart';
+import '../../game/minigames/orchestra/height_estimator.dart';
+import '../../game/minigames/sbr/motion_calibrator.dart';
 import 'widgets/telemetry_terminal.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -51,6 +54,10 @@ class _SettingsPageState extends State<SettingsPage> {
   double _sbrUpwardMultiplier = 1.5;
   // Presence mode (firmware duty-cycle handling)
   PresenceMode _presenceMode = PresenceMode.strict;
+  // Orchestra minigame height-sensing mode
+  HeightMode _orchestraHeightMode = HeightMode.fused;
+  // SBR handedness (which arm's board the player has)
+  Handedness _sbrHandedness = Handedness.left;
   
   // Cloud configuration
   late final CloudService _cloud;
@@ -97,6 +104,8 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _sbrUpwardMultiplier = GameSettings.sbrUpwardSpeedMultiplier;
       _presenceMode = GameSettings.presenceMode;
+      _orchestraHeightMode = GameSettings.orchestraHeightMode;
+      _sbrHandedness = GameSettings.sbrHandedness;
     });
   }
 
@@ -105,6 +114,29 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.device.applyPresenceMode();
     if (!mounted) return;
     setState(() => _presenceMode = mode);
+  }
+
+  Future<void> _saveOrchestraHeightMode(HeightMode mode) async {
+    await GameSettings.setOrchestraHeightMode(mode);
+    if (!mounted) return;
+    setState(() => _orchestraHeightMode = mode);
+  }
+
+  Future<void> _saveSbrHandedness(Handedness handedness) async {
+    await GameSettings.setSbrHandedness(handedness);
+    if (!mounted) return;
+    setState(() => _sbrHandedness = handedness);
+  }
+
+  static String _heightModeLabel(HeightMode m) {
+    switch (m) {
+      case HeightMode.fused:
+        return 'Fused';
+      case HeightMode.angleOnly:
+        return 'Angle';
+      case HeightMode.heightOnly:
+        return 'Height';
+    }
   }
 
   Future<void> _saveSbrUpwardMultiplier(double v) async {
@@ -273,8 +305,14 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Text(AppLocalizations.of(context)!.cancel),
           ),
           ElevatedButton(
-            onPressed: () {
-              _saveCloudConfig(urlController.text, tokenController.text);
+            onPressed: () async {
+              // §10: block saving http URLs outside the allowlist.
+              final error = CloudService.validateBaseUrl(urlController.text);
+              if (error != null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(error)));
+                return;
+              }
+              await _saveCloudConfig(urlController.text, tokenController.text);
               Navigator.of(ctx).pop();
             },
             child: Text(AppLocalizations.of(context)!.save),
@@ -368,10 +406,9 @@ class _SettingsPageState extends State<SettingsPage> {
             baseUrl: _cloudBaseUrl,
             deviceToken: _cloudDeviceToken,
             onConfigure: _showCloudConfigDialog,
-            onFlushQueue: () async {
-              await _cloud.flushQueue();
-              setState(() {}); // Refresh pending count
-            },
+            // CloudSyncSection owns the native flush; this just refreshes parent
+            // state so we don't fire flushNativeQueue twice per tap.
+            onFlushQueue: () => setState(() {}),
           ),
           const SizedBox(height: 12),
           
@@ -393,15 +430,14 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 12),
           // SBR Upward Speed Multiplier
           Card(
-            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('SBR Upward Speed', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(AppLocalizations.of(context)!.sbrUpwardSpeedTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  Text('Make the ball ascend faster than it descends. Adjust to taste.', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(AppLocalizations.of(context)!.sbrUpwardSpeedDesc, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   Slider(
                     value: _sbrUpwardMultiplier,
                     min: 1.0,
@@ -419,27 +455,78 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
 
           const SizedBox(height: 12),
-          // Presence Mode (device firmware sensor duty-cycle handling)
+          // SBR Handedness (which arm's mirrored board the player has)
           Card(
-            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Lenient Sensor Mode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(AppLocalizations.of(context)!.sbrHandednessTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Enable ONLY for old devices whose firmware turns the sensor on and off '
-                    'every ~10s to save battery. Off (default) = new always-on firmware, '
-                    'faster and more accurate presence.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  Text(
+                    AppLocalizations.of(context)!.sbrHandednessDesc,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Lenient (old battery-saving firmware)', style: TextStyle(fontSize: 12)),
+                    title: Text(AppLocalizations.of(context)!.sbrHandednessSwitch, style: const TextStyle(fontSize: 12)),
+                    value: _sbrHandedness == Handedness.right,
+                    onChanged: (isRight) => _saveSbrHandedness(isRight ? Handedness.right : Handedness.left),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          // Presence Mode (device firmware sensor duty-cycle handling)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(AppLocalizations.of(context)!.lenientSensorModeTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text(
+                    AppLocalizations.of(context)!.lenientSensorModeDesc,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(AppLocalizations.of(context)!.lenientSensorModeSwitch, style: const TextStyle(fontSize: 12)),
                     value: _presenceMode == PresenceMode.lenient,
                     onChanged: (on) => _savePresenceMode(on ? PresenceMode.lenient : PresenceMode.strict),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(AppLocalizations.of(context)!.orchestraHeightSensingTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text(
+                    AppLocalizations.of(context)!.orchestraHeightSensingDesc,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final m in HeightMode.values)
+                        ChoiceChip(
+                          label: Text(_heightModeLabel(m), style: const TextStyle(fontSize: 11)),
+                          selected: _orchestraHeightMode == m,
+                          onSelected: (_) => _saveOrchestraHeightMode(m),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -488,8 +575,6 @@ class _SettingsPageState extends State<SettingsPage> {
             // Raw Data Terminal Button
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[900],
-                foregroundColor: Colors.white,
                 side: const BorderSide(width: 2, color: Colors.black),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -528,8 +613,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               );
               
-              if (confirmed == true) {
+              if (confirmed == true && mounted) {
                 widget.game?.resetPetStats();
+                await context.read<MissionService>().forceResetMissions();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(AppLocalizations.of(context)!.petStatsResetSuccess)),

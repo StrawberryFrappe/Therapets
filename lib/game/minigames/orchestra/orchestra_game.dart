@@ -1,133 +1,207 @@
 import 'dart:async';
-import 'dart:math' as math;
 
-import 'package:flame/components.dart';
-import 'package:flame/events.dart';
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import '../../../services/device/device_service.dart';
 
+import '../../game_settings.dart';
 import '../../pets/pet_stats.dart';
 import 'cursor.dart';
+import 'height_estimator.dart';
+import 'music_scale.dart';
 import 'pet_musician.dart';
 import 'tone_player.dart';
 
-/// Orchestra minigame where pets sing at different pitches based on touch position.
-/// - Horizontal position determines pitch (smooth glide, not discrete notes)
-/// - Vertical position determines volume (top = loud, bottom = quiet)
-/// - Hold to sing, release to stop
-/// - Multiple simultaneous touches for polyphony
-/// Orchestra minigame where pets form a choir and are conducted by motion.
-/// - Tilt X: Pitch (Low -> High)
-/// - Tilt Y: Volume (Quiet -> Loud)
-/// - Visuals: Cursor follows tilt, pets animate based on their vocal range.
-class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTapDetector {
+/// Orchestra minigame — a "theremin-choir" played by arm movement.
+/// - Horizontal swing sounds the choir and sets its volume (harder = louder).
+/// - Arm height sets the pitch, soft-snapped to a musical scale.
+/// - Pitch-lock freezes the note; Calibrate sets the neutral pose.
+/// Height comes from [HeightEstimator] (accel+gyro fusion); pitch from
+/// [MusicScale]. See docs/orchestra-redesign-proposal.md.
+class OrchestraGame extends FlameGame {
   final DeviceService deviceService;
   final PetStats petStats;
   final VoidCallback onExit;
   final bool isDeviceConnected;
-  
+
   // Musicians
   final List<PetMusician> _musicians = [];
-  
+
   // Audio
   final TonePlayer _mainPlayer = TonePlayer();
-  
-  // Controls
+
+  // Visual pitch indicator
   late MotionCursor _cursor;
   StreamSubscription<TelemetryData>? _telemetrySub;
-  
-  // State
-  double _currentPitch = 0.0; // 0.0 to 1.0
-  double _currentVolume = 0.0; // 0.0 to 1.0
-  bool _isPlaying = false;
-  
-  // Motion Calibration/Smoothing
-  Vector2 _calibrationOffset = Vector2.zero();
-  bool _isCalibrated = false;
-  Vector2 _smoothedMotion = Vector2.zero(); // Matches tilt range (-1 to 1 approx)
-  static const double smoothingFactor = 0.15; // Smooth movement
-  
-  // Musical Range (Expanded ~4.5 octaves)
-  static const double minFrequency = 65.41; // C2 (Deep Bass)
-  static const double maxFrequency = 1567.98; // G6 (High Soprano)
-  
+
+  // Input model
+  final HeightEstimator _height = HeightEstimator();
+  final MusicScale _scale = MusicScale(
+    scale: ScaleType.pentatonic,
+    rootMidi: 57, // A3 — centered in the audible band so OCT-/OCT+ both work
+    spanOctaves: 2,
+    snapStrength: 0.85,
+  );
+
+  // Derived state
+  double _currentFrequency = 220.0; // smoothed (glide) frequency actually sounded
+  double _targetFrequency = 220.0; // raw target from height/lock
+  double _currentPitchNorm = 0.5;
+  double _currentVolume = 0.0;
+
+  // Audio gate + change detection (avoid per-frame platform-channel spam)
+  bool _gateOpen = false;
+  double _lastSentFreq = -1;
+  double _lastSentVol = -1;
+  bool _cleanedUp = false;
+
+  // Pitch lock
+  bool _pitchLocked = false;
+  double _lockedFrequency = 220.0;
+
+  // Pitch band = exactly what TonePlayer can sound, so the note shown matches
+  // what's heard (no silent second clamp collapsing distinct notes to one).
+  double get _minFreq => TonePlayer.minFrequency;
+  double get _maxFreq => TonePlayer.maxFrequency;
+
+  // Sample timing for the estimator.
+  DateTime? _lastSample;
+  // Consecutive near-still samples before the first auto-calibration, so the
+  // gravity baseline settles on a genuinely neutral pose.
+  int _stillSamples = 0;
+  // True when telemetry has gone quiet mid-play (BLE dropped) — stops the drone.
+  bool _telemetryStale = false;
+
+  // Bumped only on discrete UI-relevant state changes (calibrate, lock toggle,
+  // scale/octave/span change, status hint change) — the Flutter overlay
+  // listens to this instead of rebuilding every frame.
+  final ValueNotifier<int> uiRevision = ValueNotifier(0);
+  void _notifyUi() => uiRevision.value++;
+
   OrchestraGame({
     required this.deviceService,
     required this.petStats,
     required this.onExit,
     this.isDeviceConnected = false,
   });
-  
+
   @override
   Color backgroundColor() => const Color(0xFF2D1B4E); // Deep purple stage
-  
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    
-    // 1. Setup Stage & Musicians (Chorus Layout)
+
+    _height.mode = GameSettings.orchestraHeightMode;
+    _clampRangeToBand();
+
     _setupChorus();
-    
-    // 2. Add Cursor
+
     _cursor = MotionCursor(position: size / 2);
     add(_cursor);
-    
-    // 3. Add UI
-    add(TitleDisplay(game: this));
-    add(ExitButton(onTap: _handleExit, game: this));
-    
-    // 4. Input Setup
+
     if (isDeviceConnected) {
       _telemetrySub = deviceService.telemetry$.listen(
         _onTelemetry,
-        onError: (e) => print('[Orchestra] Telemetry error: $e'),
+        onError: (e) {
+          print('[Orchestra] Telemetry error: $e');
+          _markTelemetryStale();
+        },
+        onDone: _markTelemetryStale,
       );
       deviceService.requestNativeStatus();
     }
   }
-  
+
+  // Force the "signal lost" state and tell the overlay immediately, rather
+  // than waiting on the per-frame watchdog in [update] — used when the
+  // telemetry stream itself ends/errors (not just goes quiet mid-sample).
+  void _markTelemetryStale() {
+    _telemetryStale = true;
+    _currentVolume = 0.0;
+    _notifyUi();
+  }
+
+  // --- Control actions (called from the Flutter overlay in orchestra_screen.dart) ---
+
+  /// True once the instrument has a real neutral pose and can be played.
+  bool get isCalibrated => _height.isCalibrated;
+
+  /// True while the pitch is frozen on [_lockedFrequency].
+  bool get pitchLocked => _pitchLocked;
+
+  void calibrate() {
+    _height.calibrate();
+    _notifyUi();
+  }
+
+  void toggleLock() {
+    // Only meaningful once we have a real gesture-derived pitch.
+    if (!_height.isCalibrated) return;
+    _pitchLocked = !_pitchLocked;
+    if (_pitchLocked) _lockedFrequency = _targetFrequency;
+    _notifyUi();
+  }
+
+  // Audible MIDI band = TonePlayer's rate-bounded frequency range
+  // (110 Hz ≈ MIDI 45, 1760 Hz = MIDI 93). Notes outside this get rate-clamped
+  // to one pitch, so we never let a control combo push notes past it.
+  static const int _bandMinMidi = 45;
+  static const int _bandMaxMidi = 93;
+
+  void cycleScale() {
+    const values = ScaleType.values;
+    _scale.scale = values[(values.indexOf(_scale.scale) + 1) % values.length];
+    _notifyUi();
+  }
+
+  void shiftOctave(int delta) {
+    _scale.octaveShift += delta;
+    _clampRangeToBand();
+    _notifyUi();
+  }
+
+  void cycleSpan() {
+    _scale.spanOctaves = _scale.spanOctaves >= 3 ? 1 : _scale.spanOctaves + 1;
+    _clampRangeToBand();
+    _notifyUi();
+  }
+
+  // Clamp octaveShift so BOTH ends of the mapped range —
+  // [effectiveRoot, effectiveRoot + spanOctaves*12] — stay in the audible band,
+  // jointly with the current span (independent clamps let the combo escape).
+  void _clampRangeToBand() {
+    final span = _scale.spanOctaves.toInt();
+    final lo = ((_bandMinMidi - _scale.rootMidi) / 12).ceil();
+    final hi = ((_bandMaxMidi - _scale.rootMidi) / 12).floor() - span;
+    _scale.octaveShift = _scale.octaveShift.clamp(lo, hi < lo ? lo : hi).toInt();
+  }
+
+  ScaleType get scaleType => _scale.scale;
+  int get spanOctaves => _scale.spanOctaves.toInt();
+
+  /// Which of the three status hints applies right now, else null when the
+  /// instrument is fully playable. The overlay maps this to a localized
+  /// string — no English baked in here.
+  OrchestraStatus? get status {
+    if (!isDeviceConnected) return OrchestraStatus.noDevice;
+    if (_telemetryStale) return OrchestraStatus.signalLost;
+    if (!_height.isCalibrated) return OrchestraStatus.calibrating;
+    return null;
+  }
+
   void _setupChorus() {
-    // Layout: 3 Rows (Bleachers)
-    // Back Row (Bass): High up on screen, smaller, low pitch range
-    // Mid Row (Tenor/Alto): Middle, medium size, mid pitch range
-    // Front Row (Soprano): Bottom, large, high pitch range
-    
-    // Row 1: Bass (Top, Back)
-    _createRow(
-      count: 6,
-      yPos: size.y * 0.45,
-      scale: 0.6,
-      minPitch: 0.0,
-      maxPitch: 0.4,
-    );
-    
-    // Row 2: Mids (Middle)
-    _createRow(
-      count: 5,
-      yPos: size.y * 0.65,
-      scale: 0.8,
-      minPitch: 0.3,
-      maxPitch: 0.7,
-    );
-    
-    // Row 3: Soprano (Front, Bottom)
-    _createRow(
-      count: 4,
-      yPos: size.y * 0.85,
-      scale: 1.0,
-      minPitch: 0.6,
-      maxPitch: 1.0,
-    );
-    
-    // Add all to game
+    _createRow(count: 6, yPos: size.y * 0.40, scale: 0.6, minPitch: 0.0, maxPitch: 0.4);
+    _createRow(count: 5, yPos: size.y * 0.58, scale: 0.8, minPitch: 0.3, maxPitch: 0.7);
+    _createRow(count: 4, yPos: size.y * 0.76, scale: 1.0, minPitch: 0.6, maxPitch: 1.0);
     addAll(_musicians);
   }
-  
+
   void _createRow({
-    required int count, 
-    required double yPos, 
+    required int count,
+    required double yPos,
     required double scale,
     required double minPitch,
     required double maxPitch,
@@ -135,148 +209,128 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
     final rowWidth = size.x * 0.8;
     final spacing = rowWidth / (count + 1);
     final startX = (size.x - rowWidth) / 2 + spacing;
-    
+
     for (int i = 0; i < count; i++) {
-        // Assign a specific "center pitch" for this pet within the row's range
-        final rowRange = maxPitch - minPitch;
-        final petPitchCenter = minPitch + (rowRange * (i / (count - 1)));
-        
-        // Define their comfortable range around that center
-        final petMin = (petPitchCenter - 0.15).clamp(0.0, 1.0);
-        final petMax = (petPitchCenter + 0.15).clamp(0.0, 1.0);
-        
-        final musician = PetMusician(
-            petStats: petStats,
-            pitch: petPitchCenter,
-            minPitchRange: petMin,
-            maxPitchRange: petMax,
-            position: Vector2(startX + (spacing * i), yPos),
-            size: Vector2(100, 116) * scale, // Base size scaled
-        );
-        _musicians.add(musician);
+      final rowRange = maxPitch - minPitch;
+      final petPitchCenter = minPitch + (rowRange * (i / (count - 1)));
+      final petMin = (petPitchCenter - 0.15).clamp(0.0, 1.0);
+      final petMax = (petPitchCenter + 0.15).clamp(0.0, 1.0);
+
+      _musicians.add(PetMusician(
+        petStats: petStats,
+        pitch: petPitchCenter,
+        minPitchRange: petMin,
+        maxPitchRange: petMax,
+        position: Vector2(startX + (spacing * i), yPos),
+        size: Vector2(100, 116) * scale,
+      ));
     }
   }
 
-  void _handleExit() {
+  /// Called by the overlay's Exit button.
+  void exitGame() {
     cleanup();
     onExit();
   }
-  
-  // --- AUDIO LOGIC ---
-  
-  double _getFrequencyFromPitch(double pitch) {
-    // Exponential interpolation
-    final logMin = math.log(minFrequency);
-    final logMax = math.log(maxFrequency);
-    return math.exp(logMin + pitch * (logMax - logMin));
-  }
-  
+
+  // --- AUDIO ---
+
   void _updateAudio() {
-    if (_currentVolume < 0.05) {
-      if (_isPlaying) {
+    // Hysteresis so a swing envelope hovering near the threshold doesn't
+    // chatter the tone on/off.
+    final shouldPlay = _gateOpen ? _currentVolume > 0.03 : _currentVolume > 0.06;
+
+    if (!shouldPlay) {
+      if (_gateOpen) {
         _mainPlayer.stopTone();
-        _isPlaying = false;
+        _gateOpen = false;
       }
-    } else {
-      final freq = _getFrequencyFromPitch(_currentPitch);
-      if (!_isPlaying) {
-        _mainPlayer.startTone(freq, _currentVolume);
-        _isPlaying = true;
-      } else {
-        _mainPlayer.setFrequency(freq, _currentVolume);
-      }
+    } else if (!_gateOpen) {
+      _mainPlayer.startTone(_currentFrequency, _currentVolume);
+      _gateOpen = true;
+      _lastSentFreq = _currentFrequency;
+      _lastSentVol = _currentVolume;
+    } else if ((_currentFrequency - _lastSentFreq).abs() > 0.5 ||
+        (_currentVolume - _lastSentVol).abs() > 0.01) {
+      // Only cross the platform channel when something actually changed.
+      _mainPlayer.setFrequency(_currentFrequency, _currentVolume);
+      _lastSentFreq = _currentFrequency;
+      _lastSentVol = _currentVolume;
     }
-    
-    // Update Musician States
+
     for (final musician in _musicians) {
-      musician.updateSingingState(_currentPitch, _currentVolume);
+      musician.updateSingingState(_currentPitchNorm, _currentVolume);
     }
   }
 
-  // --- INPUT HANDLING ---
+  // --- INPUT ---
 
   void _onTelemetry(TelemetryData data) {
-    if (!_isCalibrated) {
-      _calibrationOffset = Vector2(data.ax, data.ay);
-      _smoothedMotion = Vector2.zero();
-      _isCalibrated = true;
+    final now = DateTime.now();
+    final dt = _lastSample == null
+        ? 0.02
+        : (now.difference(_lastSample!).inMicroseconds / 1e6).clamp(0.001, 0.1);
+    _lastSample = now;
+
+    _height.update(data, dt);
+    // Auto-calibrate once the arm has been reasonably still for a moment, so the
+    // neutral pose isn't captured mid-motion. The CALIB button re-zeros later.
+    if (!_height.isCalibrated) {
+      // Require low rotation AND a plausible ~1g reading, so a garbage/zero
+      // packet can't seed a bad neutral pose.
+      final gyroStill = data.gx.abs() + data.gy.abs() + data.gz.abs() < 45;
+      final gravitySane = data.magnitude > 0.5 && data.magnitude < 2.0;
+      _stillSamples = (gyroStill && gravitySane) ? _stillSamples + 1 : 0;
+      if (_stillSamples < 15) return;
+      _height.calibrate();
+      _notifyUi();
       return;
     }
-    
-    // Raw relative tilt
-    final rawX = data.ax - _calibrationOffset.x; // Left/Right tilt
-    final rawY = data.ay - _calibrationOffset.y; // Forward/Back tilt
-    
-    // Smooth it
-    _smoothedMotion.x = _smoothedMotion.x + smoothingFactor * (rawX - _smoothedMotion.x);
-    _smoothedMotion.y = _smoothedMotion.y + smoothingFactor * (rawY - _smoothedMotion.y);
-    
-    // Map to Game State
-    // Tilt X -> Pitch
-    // Range approx -0.5 to 0.5 -> 0.0 to 1.0
-    _currentPitch = ((_smoothedMotion.x / 0.6) + 0.5).clamp(0.0, 1.0);
-    
-    // Tilt Y -> Volume
-    // Range approx -0.5 to 0.5 -> 0.0 to 1.0
-    // Tilting BACK (positive Y usually) should be Higher Volume? Or Forward?
-    // Let's say tilting AWAY (top of phone goes down, Y decreases?) is volume up.
-    // Actually, usually Y is gravity. Flat = 0.
-    // Let's just map standard -0.5 to 0.5.
-    // Let's make: Tilt Right (X > 0) = High Pitch.
-    // Tilt Up/Back (Y < 0) = High Volume.
-    
-    // Mapping: 
-    // Y < 0 (Tilted away) -> Volume 1.0
-    // Y > 0 (Tilted towards) -> Volume 0.0
-    _currentVolume = ((_smoothedMotion.y / -0.8) + 0.5).clamp(0.0, 1.0);
-    
-    // Update Cursor Position for feedback
-    final screenX = _currentPitch * size.x;
-    final screenY = (1.0 - _currentVolume) * size.y; // High volume = Top of screen
-    _cursor.position = Vector2(screenX, screenY);
+
+    final h = _height.height;
+    _currentPitchNorm = h;
+    final freq = _pitchLocked ? _lockedFrequency : _scale.map(h).frequency;
+    _targetFrequency = freq.clamp(_minFreq, _maxFreq);
+    _currentVolume = _height.swingEnergy;
+
+    // Vertical pitch indicator: high pitch = top of screen.
+    _cursor.position = Vector2(size.x / 2, (1.0 - h) * size.y);
   }
 
-  // Fallback Touch Controls
-  @override
-  void onDragUpdate(int pointerId, DragUpdateInfo info) {
-    // Only use touch if NO motion input detected recently? 
-    // Or just override. Let's override for debugging.
-    final pos = info.eventPosition.global;
-    _currentPitch = (pos.x / size.x).clamp(0.0, 1.0);
-    _currentVolume = 1.0 - (pos.y / size.y).clamp(0.0, 1.0);
-    
-    _cursor.position = pos;
-  }
-  
-  @override
-  void onTapDown(int pointerId, TapDownInfo info) {
-    final pos = info.eventPosition.global;
-    _currentPitch = (pos.x / size.x).clamp(0.0, 1.0);
-    _currentVolume = 1.0 - (pos.y / size.y).clamp(0.0, 1.0);
-    _cursor.position = pos;
-  }
-  
   @override
   void update(double dt) {
     super.update(dt);
+    // Watchdog: if telemetry has gone quiet (BLE dropped mid-play), stop the
+    // note draining out — otherwise the last frame's volume drones forever.
+    if (_lastSample != null) {
+      final wasStale = _telemetryStale;
+      final ageMs = DateTime.now().difference(_lastSample!).inMilliseconds;
+      _telemetryStale = ageMs > 400;
+      if (_telemetryStale) _currentVolume = 0.0;
+      if (_telemetryStale != wasStale) _notifyUi();
+    }
+    // Glide the sounded pitch toward the target (portamento; also smooths the
+    // discrete jumps at scale-snap boundaries).
+    final t = (dt * 12.0).clamp(0.0, 1.0);
+    _currentFrequency += (_targetFrequency - _currentFrequency) * t;
     _updateAudio();
   }
 
-  /// Clean up all audio and subscriptions. Call this when leaving the game.
+  /// Clean up all audio and subscriptions. Idempotent — it is called both from
+  /// [exitGame] and from the screen's dispose().
   void cleanup() {
+    if (_cleanedUp) return;
+    _cleanedUp = true;
     _mainPlayer.stopTone();
     _mainPlayer.dispose();
-    
-    // Stop all pet visuals
     for (final musician in _musicians) {
       musician.stopSinging();
     }
-    
-    // Cancel telemetry subscription
     _telemetrySub?.cancel();
     _telemetrySub = null;
+    uiRevision.dispose();
   }
-  
+
   @override
   void onRemove() {
     cleanup();
@@ -284,83 +338,6 @@ class OrchestraGame extends FlameGame with MultiTouchDragDetector, MultiTouchTap
   }
 }
 
-
-
-/// Title display
-class TitleDisplay extends PositionComponent {
-  final OrchestraGame game;
-  
-  TitleDisplay({required this.game}) : super(position: Vector2(0, 20));
-  
-  @override
-  void render(Canvas canvas) {
-    final textPainter = TextPainter(
-      text: const TextSpan(
-        text: '🎵 Pet Orchestra 🎵',
-        style: TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Monocraft',
-          shadows: [Shadow(offset: Offset(2, 2), blurRadius: 4)],
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset((game.size.x - textPainter.width) / 2, 0));
-  }
-}
-
-/// Exit button component
-class ExitButton extends PositionComponent with TapCallbacks {
-  final VoidCallback onTap;
-  final OrchestraGame game;
-  
-  ExitButton({required this.onTap, required this.game}) : super(
-    size: Vector2(80, 40),
-    anchor: Anchor.center,
-  );
-  
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    position = Vector2(60, 50);
-  }
-  
-  @override
-  void render(Canvas canvas) {
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.x, size.y),
-      const Radius.circular(8),
-    );
-    canvas.drawRRect(rrect, Paint()..color = const Color(0xFFE57373));
-    canvas.drawRRect(rrect, Paint()
-      ..color = const Color(0xFF000000)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2);
-    
-    final textPainter = TextPainter(
-      text: const TextSpan(
-        text: 'EXIT',
-        style: TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Monocraft',
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset((size.x - textPainter.width) / 2, (size.y - textPainter.height) / 2),
-    );
-  }
-  
-  @override
-  void onTapUp(TapUpEvent event) {
-    onTap();
-  }
-}
+/// Why the instrument can't be played yet, if at all. The Flutter overlay
+/// (`orchestra_screen.dart`) maps each value to a localized string.
+enum OrchestraStatus { noDevice, signalLost, calibrating }

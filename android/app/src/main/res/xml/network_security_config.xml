@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cloud telemetry endpoint is plain HTTP (no TLS on backend yet). Android
+     blocks cleartext traffic by default for targetSdk 28+, which was silently
+     dropping every native (Kotlin) sync_status POST. Scoped to the known
+     ThingsBoard relay IP instead of a blanket app-wide allow (HTTPS migration
+     deferred as a blocker). This host list must stay in sync with the Dart UI
+     host allowlist const (Advanced Settings cloud_base_url validation): if a
+     host is added here it MUST also be added there, and vice versa, or the UI
+     will reject a URL the OS would otherwise permit. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">200.13.5.20</domain>
+    </domain-config>
+</network-security-config>

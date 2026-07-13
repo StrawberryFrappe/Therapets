@@ -5,7 +5,6 @@ import 'package:Therapets/game/missions/mission_service.dart';
 import 'package:Therapets/game/missions/mission.dart';
 import 'package:Therapets/game/missions/daily_missions.dart';
 import 'package:Therapets/game/pets/pet_stats.dart';
-import 'package:Therapets/services/cloud/cloud_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -13,13 +12,11 @@ void main() {
   group('MissionService Persistence and Logic', () {
     late MissionService missionService;
     late PetStats petStats;
-    late CloudService cloudService;
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
-      cloudService = CloudService(); // Usually mocked, but basic instance is fine
       petStats = PetStats();
-      missionService = MissionService(cloudService: cloudService);
+      missionService = MissionService();
     });
 
     test('init generates fresh missions if no bundle exists', () async {

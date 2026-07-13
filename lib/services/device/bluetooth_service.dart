@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'scan_buffer.dart';
+
 
 
 // Events that instruct the UI to show a dialog or request user input.
@@ -14,6 +16,10 @@ class BluetoothUserAction {
   final BluetoothUserActionType type;
   const BluetoothUserAction(this.type);
 }
+
+// Why a scan is (not) producing results, surfaced to the UI so an empty list
+// is never silent. `idle` = not scanning / finished cleanly.
+enum ScanStatus { idle, scanning, bluetoothOff, permissionDenied, error }
 
 // TODO: add more robust error reporting and expose status events if needed.
 class BluetoothService {
@@ -48,6 +54,17 @@ class BluetoothService {
   final StreamController<int> _nativeSpo2Controller = StreamController.broadcast();
   final StreamController<String> _incomingController = StreamController.broadcast();
   final StreamController<List<int>> _incomingRawController = StreamController.broadcast();
+
+  // Reason the scanner is empty (permission denied, BT off, error) so the UI
+  // can show it instead of a blank list.
+  final StreamController<ScanStatus> _scanStatusController = StreamController.broadcast();
+  Stream<ScanStatus> get scanStatus$ => _scanStatusController.stream;
+  ScanStatus _scanStatus = ScanStatus.idle;
+  ScanStatus get scanStatus => _scanStatus;
+  void _emitScanStatus(ScanStatus s) {
+    _scanStatus = s;
+    if (!_scanStatusController.isClosed) _scanStatusController.add(s);
+  }
 
   Stream<List<ScanResult>> get foundDevices$ => _foundController.stream;
   Stream<BluetoothDevice?> get connectedDevice$ => _connectedController.stream;
@@ -316,62 +333,57 @@ class BluetoothService {
     final now = DateTime.now();
     if (_scanSub != null) return; // already scanning
     if (_lastScanStart != null && now.difference(_lastScanStart!) < _scanDebounce) return;
-    _lastScanStart = now;
 
+    // `_ensureBluetoothOnBeforeScan` emits the specific reason (bluetoothOff /
+    // permissionDenied) on failure so the UI never shows a silent empty list.
+    // NOTE: do NOT set the debounce timestamp before this. A failed start
+    // (BT off, perms denied, plugin throw) must not burn the debounce window,
+    // or the user's next tap-to-retry is silently swallowed for 5s.
     final ok = await _ensureBluetoothOnBeforeScan();
     if (!ok) return;
 
     // Reset and start listening to scan results.
     _found.clear();
     _foundController.add(List<ScanResult>.from(_found));
+    _emitScanStatus(ScanStatus.scanning);
     _scanSub?.cancel();
+    // Defensively stop any lingering plugin-level scan first. flutter_blue_plus
+    // throws "Another scan is already in progress" if a prior scan (e.g. a
+    // dialog closed without a clean stop) is still active — which surfaced to
+    // the user as "Scan failed. Tap scan to retry."
+    try {
+      await FlutterBluePlus.stopScan();
+    } catch (_) {}
     try {
       await FlutterBluePlus.startScan();
     } catch (e) {
-      // ignore start scan errors; notify UI via empty results
+      if (BLE_DEBUG) print('BLE: startScan failed: $e');
+      _emitScanStatus(ScanStatus.error);
+      return; // don't attach a dead listener: leaves _scanSub null so retry works
     }
+    // Only now that the scan actually started do we arm the debounce.
+    _lastScanStart = now;
     _scanSub = FlutterBluePlus.scanResults.listen((results) {
       for (final r in results) {
-        // Skip devices without any visible name to reduce scan noise in UI
-        String name = '';
-        try {
-          final platformName = r.device.platformName;
-          final advName = r.advertisementData.advName;
-          if (platformName.isNotEmpty) {
-            name = platformName;
-          } else if (advName.isNotEmpty) {
-            name = advName;
-          }
-        } catch (_) {
-          try {
-            final advName = r.advertisementData.advName;
-            if (advName.isNotEmpty) name = advName;
-          } catch (_) {}
-        }
-        if (name.isEmpty) {
-          if (BLE_DEBUG) print('BLE: skipping unnamed device ${r.device.remoteId.str}');
-          continue;
-        }
+        // No name filter: unnamed devices are kept. Previously they were
+        // dropped, which could make the scanner appear empty. Dedup +
+        // priority-sort are pure helpers in scan_buffer.dart.
         final id = r.device.remoteId.str;
         try {
           _debugInfo[id] = 'rssi:${r.rssi} adv:${r.advertisementData}';
         } catch (_) {
           _debugInfo[id] = 'rssi:${r.rssi}';
         }
-        if (!_found.any((e) => e.device.remoteId.str == id)) {
-          _found.add(r);
-        } else {
-          final idx = _found.indexWhere((e) => e.device.remoteId.str == id);
-          if (idx != -1) _found[idx] = r;
+        if (upsertById(_found, r, (e) => e.device.remoteId.str)) {
+          _foundDirty = true;
         }
-        _foundDirty = true;
       }
       // batch emit to reduce UI jitter (coalesce frequent rssi updates)
       _foundEmitTimer ??= Timer(const Duration(milliseconds: 250), () {
         if (_foundDirty) {
           try {
             // Prioritize M5-IMU-Sensor device in scan results
-            _found.sort((a, b) => _isPriorityDevice(a) ? -1 : _isPriorityDevice(b) ? 1 : 0);
+            sortPriorityFirst(_found, _isPriorityDevice);
             _foundController.add(List<ScanResult>.from(_found));
           } catch (_) {}
         }
@@ -381,6 +393,7 @@ class BluetoothService {
       });
     }, onError: (e) {
       if (BLE_DEBUG) print('BLE: scanResults error: $e');
+      _emitScanStatus(ScanStatus.error);
     });
     _scanStopTimer?.cancel();
     if (timeout != null) {
@@ -459,17 +472,23 @@ class BluetoothService {
       if (enabledNow) {
         // Just check permissions silently; MainActivity will handle prompts
         final permsOk = await _checkPermissions();
+        if (!permsOk) _emitScanStatus(ScanStatus.permissionDenied);
         return permsOk;
       }
       // If not enabled, ask UI to prompt user to enable then perform platform enable.
       _userActionController.add(const BluetoothUserAction(BluetoothUserActionType.enableBluetooth));
       _pendingEnableCompleter = Completer<bool>();
       final enabled = await _pendingEnableCompleter!.future.timeout(const Duration(seconds: 10), onTimeout: () => false);
-      if (!enabled) return false;
+      if (!enabled) {
+        _emitScanStatus(ScanStatus.bluetoothOff);
+        return false;
+      }
       // after enabling, check permissions silently
       final permsOk = await _checkPermissions();
+      if (!permsOk) _emitScanStatus(ScanStatus.permissionDenied);
       return permsOk;
     } catch (e) {
+      _emitScanStatus(ScanStatus.error);
       return false;
     }
   }
@@ -482,6 +501,10 @@ class BluetoothService {
     _scanSub = null;
     _scanStopTimer?.cancel();
     _scanStopTimer = null;
+    _foundEmitTimer?.cancel();
+    _foundEmitTimer = null;
+    _foundDirty = false;
+    if (_scanStatus == ScanStatus.scanning) _emitScanStatus(ScanStatus.idle);
   }
 
   Future<void> connect(BluetoothDevice device, {bool save = true}) async {
@@ -634,6 +657,7 @@ class BluetoothService {
     _nativeSpo2Controller.close();
     _incomingController.close();
     _incomingRawController.close();
+    _scanStatusController.close();
     _scanSub?.cancel();
     _charSub?.cancel();
     _nativeEventsSub?.cancel();

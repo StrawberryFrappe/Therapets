@@ -201,6 +201,8 @@ class PetStats {
     _hunger = 1.0;
     _happiness = 1.0;
     _happinessBuffer = 0.0;
+    _goldCoins = 0;
+    _silverCoins = 0;
     _lastUpdateTime = DateTime.now();
     _canSave = true; // Safe to save now
     save();

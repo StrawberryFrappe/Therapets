@@ -6,14 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'mission.dart';
 import 'daily_missions.dart';
 import '../pets/pet_stats.dart';
-import '../../services/cloud/cloud_service.dart';
+import '../../services/treatment/treatment_service.dart';
 
 /// Service to manage daily missions.
 class MissionService {
-  final CloudService _cloudService;
   PetStats? _petStats;
 
-  MissionService({required CloudService cloudService}) : _cloudService = cloudService;
+  MissionService();
 
   // Atomic bundle key — replaces the two individual keys above.
   static const String _bundleKey = 'mission_bundle';
@@ -79,13 +78,10 @@ class MissionService {
     if (_petStats != null) {
       _petStats!.applyMissionReward(mission.goldReward, mission.happinessReward);
     }
-    
-    // Log to cloud - await to ensure it's sent
-    await _cloudService.logMissionCompleted(
-      timestamp: DateTime.now(),
-      missionId: mission.id,
-    );
-    
+
+    // mission_completed telemetry is now published by the native (Kotlin)
+    // side only; Dart no longer POSTs it here.
+
     // Notify UI for banner
     _completionController.add(mission);
   }
@@ -102,9 +98,13 @@ class MissionService {
 
   Future<void> _generateDailyMissions() async {
     debugPrint('[MissionService] Generating fresh daily missions');
+    final treatment = TreatmentService().treatmentNotifier.value;
+    final syncTargetSeconds = (treatment != null && treatment.usageTimeSeconds > 0)
+        ? treatment.usageTimeSeconds.toDouble()
+        : 120 * 60.0;
     // Generate 3 random missions for the day
     final missions = <Mission>[
-      SyncDurationMission(targetDuration: 120 * 60, goldReward: 50), // 2 hours
+      SyncDurationMission(targetDuration: syncTargetSeconds, goldReward: 50),
       MinigamePlayMission(targetPlays: 3, goldReward: 30),
       FeedPetMission(targetFeeds: 3, goldReward: 20),
     ];

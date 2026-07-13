@@ -41,17 +41,20 @@ class Brick extends PositionComponent with CollisionCallbacks {
     BrickType t = BrickType.standard;
     int h = 1;
 
+    // Difficulty shifts how often helpful bricks spawn (easy = more, extreme = fewer).
+    final bonus = game.difficultyConfig.helpfulBrickBonus;
+
     // Higher level = slightly better chance for rare bricks
     // Reduced base chances so standard bricks dominate
-    if (p < 0.02 + (level * 0.005)) {
+    if (p < 0.02 + (level * 0.005) + bonus) {
       t = BrickType.multiball;
-    } else if (p < 0.04 + (level * 0.005)) {
+    } else if (p < 0.04 + (level * 0.005) + bonus) {
       t = BrickType.expand;
-    } else if (p < 0.07 + (level * 0.005)) {
+    } else if (p < 0.07 + (level * 0.005) + bonus) {
       t = BrickType.exploding;
-    } else if (p < 0.09 + (level * 0.005)) {
+    } else if (p < 0.09 + (level * 0.005) + bonus) {
       t = BrickType.glass; // Piercing
-    } else if (p < 0.11 + (level * 0.005)) {
+    } else if (p < 0.11 + (level * 0.005) + bonus) {
       t = BrickType.ghost;
     } else if (p < 0.25) {
       t = BrickType.strong;

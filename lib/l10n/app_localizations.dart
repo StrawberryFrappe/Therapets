@@ -329,7 +329,7 @@ abstract class AppLocalizations {
   /// No description provided for @gameOrchestra.
   ///
   /// In en, this message translates to:
-  /// **'Orchestra'**
+  /// **'Theremin'**
   String get gameOrchestra;
 
   /// No description provided for @gameOrchestraDesc.
@@ -991,6 +991,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Turn wrist max right and tap to confirm'**
   String get sbrCalibrationRight;
+
+  /// No description provided for @sbrCalibrationStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String sbrCalibrationStep(int current, int total);
+
+  /// No description provided for @sbrUpwardSpeedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SBR Upward Speed'**
+  String get sbrUpwardSpeedTitle;
+
+  /// No description provided for @sbrUpwardSpeedDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Make the ball ascend faster than it descends. Adjust to taste.'**
+  String get sbrUpwardSpeedDesc;
+
+  /// No description provided for @lenientSensorModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lenient Sensor Mode'**
+  String get lenientSensorModeTitle;
+
+  /// No description provided for @lenientSensorModeDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable ONLY for old devices whose firmware turns the sensor on and off every ~10s to save battery. Off (default) = new always-on firmware, faster and more accurate presence.'**
+  String get lenientSensorModeDesc;
+
+  /// No description provided for @lenientSensorModeSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Lenient (old battery-saving firmware)'**
+  String get lenientSensorModeSwitch;
+
+  /// No description provided for @orchestraHeightSensingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Theremin Height Sensing'**
+  String get orchestraHeightSensingTitle;
+
+  /// No description provided for @orchestraHeightSensingDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.'**
+  String get orchestraHeightSensingDesc;
+
+  /// No description provided for @sbrHandednessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SBR Handedness'**
+  String get sbrHandednessTitle;
+
+  /// No description provided for @sbrHandednessDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Which arm\'s board you have. The right-arm board is a mirror image, so this flips the tilt sensing to match. Off (default) = left-arm board.'**
+  String get sbrHandednessDesc;
+
+  /// No description provided for @sbrHandednessSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Right-arm board'**
+  String get sbrHandednessSwitch;
+
+  /// No description provided for @orchestraCalibrate.
+  ///
+  /// In en, this message translates to:
+  /// **'Calibrate'**
+  String get orchestraCalibrate;
+
+  /// No description provided for @orchestraLock.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get orchestraLock;
+
+  /// No description provided for @orchestraLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Locked'**
+  String get orchestraLocked;
+
+  /// No description provided for @orchestraScalePentatonic.
+  ///
+  /// In en, this message translates to:
+  /// **'Pentatonic'**
+  String get orchestraScalePentatonic;
+
+  /// No description provided for @orchestraScaleDiatonic.
+  ///
+  /// In en, this message translates to:
+  /// **'Diatonic'**
+  String get orchestraScaleDiatonic;
+
+  /// No description provided for @orchestraScaleChromatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Chromatic'**
+  String get orchestraScaleChromatic;
+
+  /// No description provided for @orchestraOctaveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Lower octave'**
+  String get orchestraOctaveDown;
+
+  /// No description provided for @orchestraOctaveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Raise octave'**
+  String get orchestraOctaveUp;
+
+  /// No description provided for @orchestraSpanLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} octave range'**
+  String orchestraSpanLabel(int n);
+
+  /// No description provided for @orchestraHintNoDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a device in Settings to play'**
+  String get orchestraHintNoDevice;
+
+  /// No description provided for @orchestraHintSignalLost.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal lost — reconnect the device'**
+  String get orchestraHintSignalLost;
+
+  /// No description provided for @orchestraHintCalibrating.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold still — calibrating…'**
+  String get orchestraHintCalibrating;
 }
 
 class _AppLocalizationsDelegate

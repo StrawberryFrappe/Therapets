@@ -135,10 +135,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get gameFlappyBobDesc => '¡Sacude o toca para volar!';
 
   @override
-  String get gameOrchestra => 'Orquesta';
+  String get gameOrchestra => 'Theremín';
 
   @override
-  String get gameOrchestraDesc => 'Make your pets sing!';
+  String get gameOrchestraDesc => '¡Haz que tus mascotas canten!';
 
   @override
   String get gameDonut => 'donut.dart';
@@ -503,4 +503,84 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get sbrCalibrationRight =>
       'Gira la muñeca a la derecha al máximo y toca para confirmar';
+
+  @override
+  String sbrCalibrationStep(int current, int total) {
+    return 'Paso $current de $total';
+  }
+
+  @override
+  String get sbrUpwardSpeedTitle => 'Velocidad de Ascenso SBR';
+
+  @override
+  String get sbrUpwardSpeedDesc =>
+      'Haz que la bola suba más rápido de lo que baja. Ajusta a tu gusto.';
+
+  @override
+  String get lenientSensorModeTitle => 'Modo de Sensor Tolerante';
+
+  @override
+  String get lenientSensorModeDesc =>
+      'Actívalo SOLO para dispositivos antiguos cuyo firmware enciende y apaga el sensor cada ~10s para ahorrar batería. Desactivado (predeterminado) = firmware nuevo siempre encendido, más rápido y preciso.';
+
+  @override
+  String get lenientSensorModeSwitch =>
+      'Tolerante (firmware antiguo de ahorro de batería)';
+
+  @override
+  String get orchestraHeightSensingTitle => 'Detección de Altura del Theremín';
+
+  @override
+  String get orchestraHeightSensingDesc =>
+      'Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía.';
+
+  @override
+  String get sbrHandednessTitle => 'Lateralidad del SBR';
+
+  @override
+  String get sbrHandednessDesc =>
+      'Con qué brazo tienes la placa. La placa de brazo derecho es una imagen espejo, así que esto invierte la detección de inclinación para que coincida. Desactivado (predeterminado) = placa de brazo izquierdo.';
+
+  @override
+  String get sbrHandednessSwitch => 'Placa de brazo derecho';
+
+  @override
+  String get orchestraCalibrate => 'Calibrar';
+
+  @override
+  String get orchestraLock => 'Bloquear';
+
+  @override
+  String get orchestraLocked => 'Bloqueado';
+
+  @override
+  String get orchestraScalePentatonic => 'Pentatónica';
+
+  @override
+  String get orchestraScaleDiatonic => 'Diatónica';
+
+  @override
+  String get orchestraScaleChromatic => 'Cromática';
+
+  @override
+  String get orchestraOctaveDown => 'Bajar octava';
+
+  @override
+  String get orchestraOctaveUp => 'Subir octava';
+
+  @override
+  String orchestraSpanLabel(int n) {
+    return 'Rango de $n octava(s)';
+  }
+
+  @override
+  String get orchestraHintNoDevice =>
+      'Conecta un dispositivo en Ajustes para jugar';
+
+  @override
+  String get orchestraHintSignalLost =>
+      'Señal perdida — reconecta el dispositivo';
+
+  @override
+  String get orchestraHintCalibrating => 'Mantente quieto — calibrando…';
 }
