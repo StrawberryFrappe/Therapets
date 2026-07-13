@@ -213,5 +213,19 @@
   "lenientSensorModeDesc": "Enable ONLY for old devices whose firmware turns the sensor on and off every ~10s to save battery. Off (default) = new always-on firmware, faster and more accurate presence.",
   "lenientSensorModeSwitch": "Lenient (old battery-saving firmware)",
   "orchestraHeightSensingTitle": "Theremin Height Sensing",
-  "orchestraHeightSensingDesc": "How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts."
+  "orchestraHeightSensingDesc": "How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.",
+
+  "orchestraCalibrate": "Calibrate",
+  "orchestraLock": "Lock",
+  "orchestraLocked": "Locked",
+  "orchestraScalePentatonic": "Pentatonic",
+  "orchestraScaleDiatonic": "Diatonic",
+  "orchestraScaleChromatic": "Chromatic",
+  "orchestraOctaveDown": "Lower octave",
+  "orchestraOctaveUp": "Raise octave",
+  "orchestraSpanLabel": "{n} octave range",
+  "@orchestraSpanLabel": { "placeholders": { "n": { "type": "int" } } },
+  "orchestraHintNoDevice": "Connect a device in Settings to play",
+  "orchestraHintSignalLost": "Signal lost — reconnect the device",
+  "orchestraHintCalibrating": "Hold still — calibrating…"
 }

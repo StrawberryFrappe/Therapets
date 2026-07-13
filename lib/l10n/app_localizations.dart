@@ -1039,6 +1039,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.'**
   String get orchestraHeightSensingDesc;
+
+  /// No description provided for @orchestraCalibrate.
+  ///
+  /// In en, this message translates to:
+  /// **'Calibrate'**
+  String get orchestraCalibrate;
+
+  /// No description provided for @orchestraLock.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get orchestraLock;
+
+  /// No description provided for @orchestraLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Locked'**
+  String get orchestraLocked;
+
+  /// No description provided for @orchestraScalePentatonic.
+  ///
+  /// In en, this message translates to:
+  /// **'Pentatonic'**
+  String get orchestraScalePentatonic;
+
+  /// No description provided for @orchestraScaleDiatonic.
+  ///
+  /// In en, this message translates to:
+  /// **'Diatonic'**
+  String get orchestraScaleDiatonic;
+
+  /// No description provided for @orchestraScaleChromatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Chromatic'**
+  String get orchestraScaleChromatic;
+
+  /// No description provided for @orchestraOctaveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Lower octave'**
+  String get orchestraOctaveDown;
+
+  /// No description provided for @orchestraOctaveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Raise octave'**
+  String get orchestraOctaveUp;
+
+  /// No description provided for @orchestraSpanLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} octave range'**
+  String orchestraSpanLabel(int n);
+
+  /// No description provided for @orchestraHintNoDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a device in Settings to play'**
+  String get orchestraHintNoDevice;
+
+  /// No description provided for @orchestraHintSignalLost.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal lost — reconnect the device'**
+  String get orchestraHintSignalLost;
+
+  /// No description provided for @orchestraHintCalibrating.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold still — calibrating…'**
+  String get orchestraHintCalibrating;
 }
 
 class _AppLocalizationsDelegate

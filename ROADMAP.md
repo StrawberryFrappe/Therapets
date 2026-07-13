@@ -383,10 +383,28 @@ agentic drift given how many unrelated files this touches). Supersedes/details t
   (internal): `OrchestraGame`/`OrchestraScreen` classes, `orchestraHeightMode` field,
   `'orchestra'` game-ID routing string, directory name, `HeightMode`/`ScaleType` enums.
 
-- [ ] **6.4 — Orchestra UI rebuild from scratch.** Owner's judgment: patch-level fixes aren't
-  enough, the interaction/UI needs a redesign (echoes existing Phase 7 note: movement-cursor +
-  gesture-as-orders "went horrible"). Own phase, sequenced **after** 6.1/6.2 are scoped (redesign
-  should account for which settings become real controls and what the latency budget is).
+- [x] **6.4 — Orchestra UI rebuild from scratch — DONE 2026-07-12.** Root cause of the
+  "controls aren't reachable" report: every HUD element (title, status hint, CALIB/LOCK/
+  scale/octave/span buttons, EXIT) was hand-drawn as Flame `PositionComponent`s painting
+  directly to `Canvas` (`orchestra_game.dart`, old `TitleDisplay`/`StatusHint`/`LabelButton`/
+  `ExitButton`), with the bottom control row placed at a raw `size.y - h - 8` pixel offset —
+  no `SafeArea`/system-inset awareness, so it could land under the landscape gesture-nav bar.
+  Also 100% hardcoded English, zero l10n, inconsistent with 6.6. Rebuilt as a real Flutter
+  widget overlay (`orchestra_screen.dart`, using the `MinigameScreen.overlay` mechanism already
+  established by `flappy_bird_screen.dart`) wrapped in `SafeArea`, with proper Material buttons
+  and a `ValueListenableBuilder` driven by a new `OrchestraGame.uiRevision` notifier that only
+  fires on real state changes (calibrate/lock/scale/octave/span/status), not every frame. Flame
+  now only renders the stage (background, `MotionCursor`, singing `PetMusician`s) — no
+  interactive components left in the canvas. Added 12 new EN/ES l10n keys for every control
+  label and status hint that was previously raw English; `flutter gen-l10n` re-run. `OrchestraGame`
+  control methods de-privatized (`calibrate`, `toggleLock`, `cycleScale`, `shiftOctave`,
+  `cycleSpan`, `exitGame`) so the overlay can call them directly; height/scale/audio DSP logic
+  untouched. `flutter analyze` clean, `flutter test` 79/79 green. **No widget test added** — this
+  repo has zero screen-widget-test precedent, and `OrchestraScreen`'s `MinigameScreen` wrapper
+  hits unmocked platform channels (`wakelock_plus`) under `flutter test`; relied on analyze +
+  full suite + adversarial code review instead. **Not yet verified on a real device** — whether
+  the bottom bar now actually clears the gesture-nav area in landscape and controls register taps
+  needs an on-device pass, same caveat pattern as 6.1/6.5.
 
 - [x] **6.5 — Advanced Settings: wrong sensor button shown — FIXED 2026-07-12, unverified on
   hardware.** Root cause confirmed: two premature `_deviceType = DeviceType.max30100` writes in

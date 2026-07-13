@@ -528,4 +528,42 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get orchestraHeightSensingDesc =>
       'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.';
+
+  @override
+  String get orchestraCalibrate => 'Calibrate';
+
+  @override
+  String get orchestraLock => 'Lock';
+
+  @override
+  String get orchestraLocked => 'Locked';
+
+  @override
+  String get orchestraScalePentatonic => 'Pentatonic';
+
+  @override
+  String get orchestraScaleDiatonic => 'Diatonic';
+
+  @override
+  String get orchestraScaleChromatic => 'Chromatic';
+
+  @override
+  String get orchestraOctaveDown => 'Lower octave';
+
+  @override
+  String get orchestraOctaveUp => 'Raise octave';
+
+  @override
+  String orchestraSpanLabel(int n) {
+    return '$n octave range';
+  }
+
+  @override
+  String get orchestraHintNoDevice => 'Connect a device in Settings to play';
+
+  @override
+  String get orchestraHintSignalLost => 'Signal lost — reconnect the device';
+
+  @override
+  String get orchestraHintCalibrating => 'Hold still — calibrating…';
 }

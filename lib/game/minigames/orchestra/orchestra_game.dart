@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:flame/components.dart';
-import 'package:flame/events.dart';
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import '../../../services/device/device_service.dart';
@@ -75,6 +74,12 @@ class OrchestraGame extends FlameGame {
   // True when telemetry has gone quiet mid-play (BLE dropped) — stops the drone.
   bool _telemetryStale = false;
 
+  // Bumped only on discrete UI-relevant state changes (calibrate, lock toggle,
+  // scale/octave/span change, status hint change) — the Flutter overlay
+  // listens to this instead of rebuilding every frame.
+  final ValueNotifier<int> uiRevision = ValueNotifier(0);
+  void _notifyUi() => uiRevision.value++;
+
   OrchestraGame({
     required this.deviceService,
     required this.petStats,
@@ -97,52 +102,47 @@ class OrchestraGame extends FlameGame {
     _cursor = MotionCursor(position: size / 2);
     add(_cursor);
 
-    add(TitleDisplay(game: this));
-    add(StatusHint(game: this));
-    add(ExitButton(onTap: _handleExit, game: this));
-    _addControls();
-
     if (isDeviceConnected) {
       _telemetrySub = deviceService.telemetry$.listen(
         _onTelemetry,
-        onError: (e) => print('[Orchestra] Telemetry error: $e'),
+        onError: (e) {
+          print('[Orchestra] Telemetry error: $e');
+          _markTelemetryStale();
+        },
+        onDone: _markTelemetryStale,
       );
       deviceService.requestNativeStatus();
     }
   }
 
-  void _addControls() {
-    // A row of tap controls along the bottom of the stage.
-    const w = 76.0;
-    const h = 34.0;
-    const gap = 6.0;
-    final y = size.y - h - 8;
-    var x = 8.0;
-    void place(String Function() label, VoidCallback onPressed) {
-      add(LabelButton(
-        label: label,
-        onPressed: onPressed,
-        position: Vector2(x, y),
-        size: Vector2(w, h),
-      ));
-      x += w + gap;
-    }
-
-    place(() => 'CALIB', _height.calibrate);
-    place(() => _pitchLocked ? 'LOCKED' : 'LOCK', _toggleLock);
-    place(() => _scaleLabel, _cycleScale);
-    place(() => 'OCT-', () => _shiftOctave(-1));
-    place(() => 'OCT+', () => _shiftOctave(1));
-    place(() => _spanLabel, _cycleSpan);
+  // Force the "signal lost" state and tell the overlay immediately, rather
+  // than waiting on the per-frame watchdog in [update] — used when the
+  // telemetry stream itself ends/errors (not just goes quiet mid-sample).
+  void _markTelemetryStale() {
+    _telemetryStale = true;
+    _currentVolume = 0.0;
+    _notifyUi();
   }
 
-  // --- Control actions ---
+  // --- Control actions (called from the Flutter overlay in orchestra_screen.dart) ---
 
-  void _toggleLock() {
+  /// True once the instrument has a real neutral pose and can be played.
+  bool get isCalibrated => _height.isCalibrated;
+
+  /// True while the pitch is frozen on [_lockedFrequency].
+  bool get pitchLocked => _pitchLocked;
+
+  void calibrate() {
+    _height.calibrate();
+    _notifyUi();
+  }
+
+  void toggleLock() {
     // Only meaningful once we have a real gesture-derived pitch.
     if (!_height.isCalibrated) return;
     _pitchLocked = !_pitchLocked;
     if (_pitchLocked) _lockedFrequency = _targetFrequency;
+    _notifyUi();
   }
 
   // Audible MIDI band = TonePlayer's rate-bounded frequency range
@@ -151,19 +151,22 @@ class OrchestraGame extends FlameGame {
   static const int _bandMinMidi = 45;
   static const int _bandMaxMidi = 93;
 
-  void _cycleScale() {
+  void cycleScale() {
     const values = ScaleType.values;
     _scale.scale = values[(values.indexOf(_scale.scale) + 1) % values.length];
+    _notifyUi();
   }
 
-  void _shiftOctave(int delta) {
+  void shiftOctave(int delta) {
     _scale.octaveShift += delta;
     _clampRangeToBand();
+    _notifyUi();
   }
 
-  void _cycleSpan() {
+  void cycleSpan() {
     _scale.spanOctaves = _scale.spanOctaves >= 3 ? 1 : _scale.spanOctaves + 1;
     _clampRangeToBand();
+    _notifyUi();
   }
 
   // Clamp octaveShift so BOTH ends of the mapped range —
@@ -176,24 +179,16 @@ class OrchestraGame extends FlameGame {
     _scale.octaveShift = _scale.octaveShift.clamp(lo, hi < lo ? lo : hi).toInt();
   }
 
-  String get _scaleLabel {
-    switch (_scale.scale) {
-      case ScaleType.pentatonic:
-        return 'PENTA';
-      case ScaleType.diatonic:
-        return 'DIA';
-      case ScaleType.chromatic:
-        return 'CHROM';
-    }
-  }
+  ScaleType get scaleType => _scale.scale;
+  int get spanOctaves => _scale.spanOctaves.toInt();
 
-  String get _spanLabel => '${_scale.spanOctaves.toInt()}OCT';
-
-  /// A hint shown when the instrument can't be played yet, else null.
-  String? get statusHint {
-    if (!isDeviceConnected) return 'Connect a device in Settings to play';
-    if (_telemetryStale) return 'Signal lost — reconnect the device';
-    if (!_height.isCalibrated) return 'Hold still — calibrating…';
+  /// Which of the three status hints applies right now, else null when the
+  /// instrument is fully playable. The overlay maps this to a localized
+  /// string — no English baked in here.
+  OrchestraStatus? get status {
+    if (!isDeviceConnected) return OrchestraStatus.noDevice;
+    if (_telemetryStale) return OrchestraStatus.signalLost;
+    if (!_height.isCalibrated) return OrchestraStatus.calibrating;
     return null;
   }
 
@@ -232,7 +227,8 @@ class OrchestraGame extends FlameGame {
     }
   }
 
-  void _handleExit() {
+  /// Called by the overlay's Exit button.
+  void exitGame() {
     cleanup();
     onExit();
   }
@@ -287,6 +283,7 @@ class OrchestraGame extends FlameGame {
       _stillSamples = (gyroStill && gravitySane) ? _stillSamples + 1 : 0;
       if (_stillSamples < 15) return;
       _height.calibrate();
+      _notifyUi();
       return;
     }
 
@@ -306,9 +303,11 @@ class OrchestraGame extends FlameGame {
     // Watchdog: if telemetry has gone quiet (BLE dropped mid-play), stop the
     // note draining out — otherwise the last frame's volume drones forever.
     if (_lastSample != null) {
+      final wasStale = _telemetryStale;
       final ageMs = DateTime.now().difference(_lastSample!).inMilliseconds;
       _telemetryStale = ageMs > 400;
       if (_telemetryStale) _currentVolume = 0.0;
+      if (_telemetryStale != wasStale) _notifyUi();
     }
     // Glide the sounded pitch toward the target (portamento; also smooths the
     // discrete jumps at scale-snap boundaries).
@@ -318,7 +317,7 @@ class OrchestraGame extends FlameGame {
   }
 
   /// Clean up all audio and subscriptions. Idempotent — it is called both from
-  /// the in-game EXIT button and from the screen's dispose().
+  /// [exitGame] and from the screen's dispose().
   void cleanup() {
     if (_cleanedUp) return;
     _cleanedUp = true;
@@ -329,6 +328,7 @@ class OrchestraGame extends FlameGame {
     }
     _telemetrySub?.cancel();
     _telemetrySub = null;
+    uiRevision.dispose();
   }
 
   @override
@@ -338,163 +338,6 @@ class OrchestraGame extends FlameGame {
   }
 }
 
-/// Title display
-class TitleDisplay extends PositionComponent {
-  final OrchestraGame game;
-
-  TitleDisplay({required this.game}) : super(position: Vector2(0, 20));
-
-  @override
-  void render(Canvas canvas) {
-    final textPainter = TextPainter(
-      text: const TextSpan(
-        text: '🎵 Pet Theremin 🎵',
-        style: TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Monocraft',
-          shadows: [Shadow(offset: Offset(2, 2), blurRadius: 4)],
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset((game.size.x - textPainter.width) / 2, 0));
-  }
-}
-
-/// Centered hint shown while the instrument can't be played (no device yet,
-/// or still calibrating). Renders nothing once playable.
-class StatusHint extends PositionComponent {
-  final OrchestraGame game;
-
-  StatusHint({required this.game});
-
-  @override
-  void render(Canvas canvas) {
-    final hint = game.statusHint;
-    if (hint == null) return;
-    final tp = TextPainter(
-      text: TextSpan(
-        text: hint,
-        style: const TextStyle(
-          color: Color(0xFFFFE082),
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Monocraft',
-          shadows: [Shadow(offset: Offset(1, 1), blurRadius: 3)],
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    tp.layout();
-    tp.paint(
-      canvas,
-      Offset((game.size.x - tp.width) / 2, game.size.y * 0.28),
-    );
-  }
-}
-
-/// A small tap button rendering a dynamic label.
-class LabelButton extends PositionComponent with TapCallbacks {
-  final String Function() label;
-  final VoidCallback onPressed;
-  final Color color;
-
-  LabelButton({
-    required this.label,
-    required this.onPressed,
-    this.color = const Color(0xFF5C6BC0),
-    Vector2? position,
-    Vector2? size,
-  }) : super(position: position, size: size ?? Vector2(76, 34));
-
-  @override
-  void render(Canvas canvas) {
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.x, size.y),
-      const Radius.circular(6),
-    );
-    canvas.drawRRect(rrect, Paint()..color = color);
-    canvas.drawRRect(
-      rrect,
-      Paint()
-        ..color = const Color(0xFF000000)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-
-    final tp = TextPainter(
-      text: TextSpan(
-        text: label(),
-        style: const TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Monocraft',
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    tp.layout();
-    tp.paint(canvas, Offset((size.x - tp.width) / 2, (size.y - tp.height) / 2));
-  }
-
-  @override
-  void onTapUp(TapUpEvent event) => onPressed();
-}
-
-/// Exit button component
-class ExitButton extends PositionComponent with TapCallbacks {
-  final VoidCallback onTap;
-  final OrchestraGame game;
-
-  ExitButton({required this.onTap, required this.game})
-      : super(size: Vector2(80, 40), anchor: Anchor.center);
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    position = Vector2(60, 50);
-  }
-
-  @override
-  void render(Canvas canvas) {
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.x, size.y),
-      const Radius.circular(8),
-    );
-    canvas.drawRRect(rrect, Paint()..color = const Color(0xFFE57373));
-    canvas.drawRRect(
-      rrect,
-      Paint()
-        ..color = const Color(0xFF000000)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-
-    final textPainter = TextPainter(
-      text: const TextSpan(
-        text: 'EXIT',
-        style: TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Monocraft',
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset((size.x - textPainter.width) / 2, (size.y - textPainter.height) / 2),
-    );
-  }
-
-  @override
-  void onTapUp(TapUpEvent event) {
-    onTap();
-  }
-}
+/// Why the instrument can't be played yet, if at all. The Flutter overlay
+/// (`orchestra_screen.dart`) maps each value to a localized string.
+enum OrchestraStatus { noDevice, signalLost, calibrating }

@@ -194,5 +194,19 @@
   "lenientSensorModeDesc": "Actívalo SOLO para dispositivos antiguos cuyo firmware enciende y apaga el sensor cada ~10s para ahorrar batería. Desactivado (predeterminado) = firmware nuevo siempre encendido, más rápido y preciso.",
   "lenientSensorModeSwitch": "Tolerante (firmware antiguo de ahorro de batería)",
   "orchestraHeightSensingTitle": "Detección de Altura del Theremín",
-  "orchestraHeightSensingDesc": "Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía."
+  "orchestraHeightSensingDesc": "Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía.",
+
+  "orchestraCalibrate": "Calibrar",
+  "orchestraLock": "Bloquear",
+  "orchestraLocked": "Bloqueado",
+  "orchestraScalePentatonic": "Pentatónica",
+  "orchestraScaleDiatonic": "Diatónica",
+  "orchestraScaleChromatic": "Cromática",
+  "orchestraOctaveDown": "Bajar octava",
+  "orchestraOctaveUp": "Subir octava",
+  "orchestraSpanLabel": "Rango de {n} octava(s)",
+  "@orchestraSpanLabel": { "placeholders": { "n": { "type": "int" } } },
+  "orchestraHintNoDevice": "Conecta un dispositivo en Ajustes para jugar",
+  "orchestraHintSignalLost": "Señal perdida — reconecta el dispositivo",
+  "orchestraHintCalibrating": "Mantente quieto — calibrando…"
 }

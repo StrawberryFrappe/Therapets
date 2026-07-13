@@ -533,4 +533,44 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get orchestraHeightSensingDesc =>
       'Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía.';
+
+  @override
+  String get orchestraCalibrate => 'Calibrar';
+
+  @override
+  String get orchestraLock => 'Bloquear';
+
+  @override
+  String get orchestraLocked => 'Bloqueado';
+
+  @override
+  String get orchestraScalePentatonic => 'Pentatónica';
+
+  @override
+  String get orchestraScaleDiatonic => 'Diatónica';
+
+  @override
+  String get orchestraScaleChromatic => 'Cromática';
+
+  @override
+  String get orchestraOctaveDown => 'Bajar octava';
+
+  @override
+  String get orchestraOctaveUp => 'Subir octava';
+
+  @override
+  String orchestraSpanLabel(int n) {
+    return 'Rango de $n octava(s)';
+  }
+
+  @override
+  String get orchestraHintNoDevice =>
+      'Conecta un dispositivo en Ajustes para jugar';
+
+  @override
+  String get orchestraHintSignalLost =>
+      'Señal perdida — reconecta el dispositivo';
+
+  @override
+  String get orchestraHintCalibrating => 'Mantente quieto — calibrando…';
 }
