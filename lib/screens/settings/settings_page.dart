@@ -7,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../services/device/device_service.dart';
 import '../../services/cloud/cloud_service.dart';
 import '../../game/virtual_pet_game.dart';
+import '../../game/missions/mission_service.dart';
 import '../pulse_oximeter/pulse_oximeter_screen.dart';
 import '../temperature_sensor/temperature_sensor_screen.dart';
 import 'token_scanner_page.dart';
@@ -607,8 +608,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               );
               
-              if (confirmed == true) {
+              if (confirmed == true && mounted) {
                 widget.game?.resetPetStats();
+                await context.read<MissionService>().forceResetMissions();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(AppLocalizations.of(context)!.petStatsResetSuccess)),
