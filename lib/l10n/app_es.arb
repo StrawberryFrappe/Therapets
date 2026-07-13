@@ -195,6 +195,9 @@
   "lenientSensorModeSwitch": "Tolerante (firmware antiguo de ahorro de batería)",
   "orchestraHeightSensingTitle": "Detección de Altura del Theremín",
   "orchestraHeightSensingDesc": "Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía.",
+  "sbrHandednessTitle": "Lateralidad del SBR",
+  "sbrHandednessDesc": "Con qué brazo tienes la placa. La placa de brazo derecho es una imagen espejo, así que esto invierte la detección de inclinación para que coincida. Desactivado (predeterminado) = placa de brazo izquierdo.",
+  "sbrHandednessSwitch": "Placa de brazo derecho",
 
   "orchestraCalibrate": "Calibrar",
   "orchestraLock": "Bloquear",

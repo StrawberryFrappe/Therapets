@@ -214,6 +214,9 @@
   "lenientSensorModeSwitch": "Lenient (old battery-saving firmware)",
   "orchestraHeightSensingTitle": "Theremin Height Sensing",
   "orchestraHeightSensingDesc": "How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.",
+  "sbrHandednessTitle": "SBR Handedness",
+  "sbrHandednessDesc": "Which arm's board you have. The right-arm board is a mirror image, so this flips the tilt sensing to match. Off (default) = left-arm board.",
+  "sbrHandednessSwitch": "Right-arm board",
 
   "orchestraCalibrate": "Calibrate",
   "orchestraLock": "Lock",

@@ -20,6 +20,7 @@ import 'sections/app_updates_section.dart';
 import '../../services/update_service.dart';
 import '../../game/game_settings.dart';
 import '../../game/minigames/orchestra/height_estimator.dart';
+import '../../game/minigames/sbr/motion_calibrator.dart';
 import 'widgets/telemetry_terminal.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -54,6 +55,8 @@ class _SettingsPageState extends State<SettingsPage> {
   PresenceMode _presenceMode = PresenceMode.strict;
   // Orchestra minigame height-sensing mode
   HeightMode _orchestraHeightMode = HeightMode.fused;
+  // SBR handedness (which arm's board the player has)
+  Handedness _sbrHandedness = Handedness.left;
   
   // Cloud configuration
   late final CloudService _cloud;
@@ -101,6 +104,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _sbrUpwardMultiplier = GameSettings.sbrUpwardSpeedMultiplier;
       _presenceMode = GameSettings.presenceMode;
       _orchestraHeightMode = GameSettings.orchestraHeightMode;
+      _sbrHandedness = GameSettings.sbrHandedness;
     });
   }
 
@@ -115,6 +119,12 @@ class _SettingsPageState extends State<SettingsPage> {
     await GameSettings.setOrchestraHeightMode(mode);
     if (!mounted) return;
     setState(() => _orchestraHeightMode = mode);
+  }
+
+  Future<void> _saveSbrHandedness(Handedness handedness) async {
+    await GameSettings.setSbrHandedness(handedness);
+    if (!mounted) return;
+    setState(() => _sbrHandedness = handedness);
   }
 
   static String _heightModeLabel(HeightMode m) {
@@ -432,6 +442,31 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() => _sbrUpwardMultiplier = v);
                     },
                     onChangeEnd: (v) => _saveSbrUpwardMultiplier(v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          // SBR Handedness (which arm's mirrored board the player has)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(AppLocalizations.of(context)!.sbrHandednessTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text(
+                    AppLocalizations.of(context)!.sbrHandednessDesc,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(AppLocalizations.of(context)!.sbrHandednessSwitch, style: const TextStyle(fontSize: 12)),
+                    value: _sbrHandedness == Handedness.right,
+                    onChanged: (isRight) => _saveSbrHandedness(isRight ? Handedness.right : Handedness.left),
                   ),
                 ],
               ),

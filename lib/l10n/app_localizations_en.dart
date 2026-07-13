@@ -530,6 +530,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.';
 
   @override
+  String get sbrHandednessTitle => 'SBR Handedness';
+
+  @override
+  String get sbrHandednessDesc =>
+      'Which arm\'s board you have. The right-arm board is a mirror image, so this flips the tilt sensing to match. Off (default) = left-arm board.';
+
+  @override
+  String get sbrHandednessSwitch => 'Right-arm board';
+
+  @override
   String get orchestraCalibrate => 'Calibrate';
 
   @override

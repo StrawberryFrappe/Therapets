@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/app_localizations.dart';
 
 import '../../../services/device/device_service.dart';
+import '../../game_settings.dart';
 import '../donut/donut.dart';
 import 'motion_calibrator.dart';
 
@@ -50,7 +51,10 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
   }
 
   void _onTelemetry(TelemetryData data) {
-    _latestRollAngle = MotionCalibrator.rollFromTelemetry(data);
+    _latestRollAngle = MotionCalibrator.rollFromTelemetry(
+      data,
+      handedness: GameSettings.sbrHandedness,
+    );
   }
 
   void _handleTap() {
@@ -131,10 +135,20 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
             child: IgnorePointer(
               child: Opacity(
                 opacity: 0.8,
-                child: Image.asset(
-                  _getImageAsset(),
-                  fit: BoxFit.contain,
-                  height: MediaQuery.of(context).size.height * 0.4,
+                child: Transform(
+                  alignment: Alignment.center,
+                  // Mirror the arm reference art for the right-arm board,
+                  // whose orthosis is mounted as a mirror image of the left.
+                  transform: Matrix4.diagonal3Values(
+                    GameSettings.sbrHandedness == Handedness.right ? -1.0 : 1.0,
+                    1.0,
+                    1.0,
+                  ),
+                  child: Image.asset(
+                    _getImageAsset(),
+                    fit: BoxFit.contain,
+                    height: MediaQuery.of(context).size.height * 0.4,
+                  ),
                 ),
               ),
             ),

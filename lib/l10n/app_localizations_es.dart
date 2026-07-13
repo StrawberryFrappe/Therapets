@@ -535,6 +535,16 @@ class AppLocalizationsEs extends AppLocalizations {
       'Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía.';
 
   @override
+  String get sbrHandednessTitle => 'Lateralidad del SBR';
+
+  @override
+  String get sbrHandednessDesc =>
+      'Con qué brazo tienes la placa. La placa de brazo derecho es una imagen espejo, así que esto invierte la detección de inclinación para que coincida. Desactivado (predeterminado) = placa de brazo izquierdo.';
+
+  @override
+  String get sbrHandednessSwitch => 'Placa de brazo derecho';
+
+  @override
   String get orchestraCalibrate => 'Calibrar';
 
   @override

@@ -1040,6 +1040,24 @@ abstract class AppLocalizations {
   /// **'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.'**
   String get orchestraHeightSensingDesc;
 
+  /// No description provided for @sbrHandednessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SBR Handedness'**
+  String get sbrHandednessTitle;
+
+  /// No description provided for @sbrHandednessDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Which arm\'s board you have. The right-arm board is a mirror image, so this flips the tilt sensing to match. Off (default) = left-arm board.'**
+  String get sbrHandednessDesc;
+
+  /// No description provided for @sbrHandednessSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Right-arm board'**
+  String get sbrHandednessSwitch;
+
   /// No description provided for @orchestraCalibrate.
   ///
   /// In en, this message translates to:

@@ -10,6 +10,13 @@ enum CalibrationState {
   done,
 }
 
+/// Which arm's orthosis/board the player is wearing. The right-arm board is
+/// mirror-mounted relative to the left-arm one (rotating the whole orthosis
+/// 180° about the forearm's long axis puts the M5Stick back in the same
+/// position/orientation) — so the raw roll-axis accelerometer reading is
+/// sign-flipped between the two boards for the same physical wrist angle.
+enum Handedness { left, right }
+
 /// Processes IMU telemetry during a calibration phase to determine
 /// the user's comfortable tilt range.
 ///
@@ -31,9 +38,16 @@ class MotionCalibrator {
 
   /// Computes the roll angle in degrees from raw telemetry.
   /// Roll = rotation around the axis running along the forearm.
-  static double rollFromTelemetry(TelemetryData data) {
+  ///
+  /// [handedness] compensates for the mirrored right-arm board (see
+  /// [Handedness]) by flipping the sign fed into `ax`.
+  static double rollFromTelemetry(
+    TelemetryData data, {
+    Handedness handedness = Handedness.left,
+  }) {
+    final signedAx = handedness == Handedness.right ? data.ax : -data.ax;
     return math.atan2(
-          -data.ax,
+          signedAx,
           math.sqrt(data.ay * data.ay + data.az * data.az),
         ) *
         180.0 /

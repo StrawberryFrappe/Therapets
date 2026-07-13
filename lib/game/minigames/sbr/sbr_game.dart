@@ -6,6 +6,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/painting.dart';
 
 import '../../../services/device/device_service.dart';
+import '../../game_settings.dart';
 import '../../pets/pet_stats.dart';
 
 import 'ball.dart';
@@ -88,7 +89,10 @@ class SBRGame extends FlameGame with HasCollisionDetection, TapCallbacks, DragCa
     if (calibrator == null || calibrator!.state != CalibrationState.done) return;
     if (!hasStarted || isGameOver) return;
 
-    final roll = MotionCalibrator.rollFromTelemetry(data);
+    final roll = MotionCalibrator.rollFromTelemetry(
+      data,
+      handedness: GameSettings.sbrHandedness,
+    );
     final screenX = calibrator!.mapAngleToScreenX(roll, size.x, bumper.size.x);
     bumper.setPositionX(screenX);
   }

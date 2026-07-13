@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/device/presence_profile.dart';
 import 'minigames/orchestra/height_estimator.dart';
+import 'minigames/sbr/motion_calibrator.dart';
 
 /// Which presence-detection profile to use, based on the connected device's
 /// firmware. See [PresenceProfile].
@@ -25,9 +26,14 @@ class GameSettings {
   /// [HeightMode.fused]; `angleOnly` is the robust drift-free fallback.
   static HeightMode orchestraHeightMode = HeightMode.fused;
 
+  /// Which arm's SBR board the player has. Defaults to [Handedness.left]
+  /// (matches the original shipped board/behavior).
+  static Handedness sbrHandedness = Handedness.left;
+
   static const _prefsKey = 'sbr_upward_speed_multiplier';
   static const _presenceModeKey = 'presence_mode';
   static const _orchestraHeightModeKey = 'orchestra_height_mode';
+  static const _sbrHandednessKey = 'sbr_handedness';
 
   /// Resolve the current mode to its tuning profile.
   static PresenceProfile get presenceProfile => presenceMode == PresenceMode.lenient
@@ -47,6 +53,11 @@ class GameSettings {
     orchestraHeightMode = HeightMode.values.firstWhere(
       (m) => m.name == heightModeName,
       orElse: () => orchestraHeightMode,
+    );
+    final handednessName = prefs.getString(_sbrHandednessKey);
+    sbrHandedness = Handedness.values.firstWhere(
+      (h) => h.name == handednessName,
+      orElse: () => sbrHandedness,
     );
   }
 
@@ -69,5 +80,12 @@ class GameSettings {
     orchestraHeightMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_orchestraHeightModeKey, mode.name);
+  }
+
+  /// Persist the SBR handedness (which arm's board the player has).
+  static Future<void> setSbrHandedness(Handedness handedness) async {
+    sbrHandedness = handedness;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sbrHandednessKey, handedness.name);
   }
 }
