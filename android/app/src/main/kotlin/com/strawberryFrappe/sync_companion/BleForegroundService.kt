@@ -68,7 +68,13 @@ class BleForegroundService : Service() {
     private var petCareRunnable: Runnable? = null
     private var syncStateRunnable: Runnable? = null
     private lateinit var bioProcessor: BioSignalProcessor
+    private lateinit var tempProcessor: TemperatureSignalProcessor
     private lateinit var cloudManager: CloudManager
+    // Sticky sensor type by BLE payload size (ADR 0006): 16 = MAX30100 pulse,
+    // 14 = GY906 temperature, 0 = not yet detected. Latched on first packet,
+    // reset on disconnect so a swapped device is re-detected. Volatile: written on
+    // the BLE callback thread, read on the 1 Hz sync-timer thread.
+    @Volatile private var activeSensorBytes = 0
     // Held only while GATT is connected, so the 1Hz sync tally doesn't stall on screen-off idle.
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -92,6 +98,7 @@ class BleForegroundService : Service() {
         // native state so UI can display it immediately. The service will update
         // the persisted flag when a real connection/disconnection occurs.
         bioProcessor = BioSignalProcessor(this)
+        tempProcessor = TemperatureSignalProcessor(this)
         cloudManager = CloudManager(this)
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Therapets:BleSyncWakeLock").apply {
@@ -120,8 +127,8 @@ class BleForegroundService : Service() {
                 ACTION_QUERY_STATUS -> {
                     // Reply with canonical persisted connected state and emit lastBytes
                     val connectedNow = prefs?.getBoolean(PREF_CONNECTED, false) == true
-                        try { Log.i("BleForegroundService", "query status: connected=$connectedNow humanDetected=${bioProcessor.humanDetected} bpm=${bioProcessor.lastValidBpm} lastBytesLen=${lastBytes?.size ?: 0}") } catch (e: Exception) {}
-                        sendStatusBroadcast(connectedNow, bioProcessor.humanDetected, bioProcessor.lastValidBpm, bioProcessor.lastValidSpO2)
+                        try { Log.i("BleForegroundService", "query status: connected=$connectedNow humanDetected=${presenceDetected()} bpm=${bioProcessor.lastValidBpm} lastBytesLen=${lastBytes?.size ?: 0}") } catch (e: Exception) {}
+                        sendStatusBroadcast(connectedNow, presenceDetected(), bioProcessor.lastValidBpm, bioProcessor.lastValidSpO2)
                         try {
                             if (lastBytes != null) {
                                 val bcast = Intent("com.strawberryFrappe.sync_companion.BLE_EVENT")
@@ -260,8 +267,8 @@ class BleForegroundService : Service() {
                     val connected = gatt != null && prefs?.getBoolean(PREF_CONNECTED, false) == true
                     if (connected) {
                         isConnectedThisMinute = true
-                        bioProcessor.evaluateGracePeriod()
-                        if (bioProcessor.humanDetected) {
+                        evaluateActivePresenceGrace()
+                        if (presenceDetected()) {
                             syncedSecondsThisMinute++
                             if (bioProcessor.lastValidBpm > 0) bpmReadings.add(bioProcessor.lastValidBpm)
                             if (bioProcessor.lastValidSpO2 > 0) spo2Readings.add(bioProcessor.lastValidSpO2)
@@ -306,6 +313,16 @@ class BleForegroundService : Service() {
         handler.postDelayed(syncStateRunnable!!, 1000)
     }
 
+    /** Human presence from whichever processor owns the sticky active sensor type. */
+    private fun presenceDetected(): Boolean =
+        if (activeSensorBytes == 14) tempProcessor.humanDetected else bioProcessor.humanDetected
+
+    /** Run the grace-window evaluation on the active sensor's processor. */
+    private fun evaluateActivePresenceGrace() {
+        if (activeSensorBytes == 14) tempProcessor.evaluateGracePeriod()
+        else bioProcessor.evaluateGracePeriod()
+    }
+
     private fun checkPetCare() {
         val p = prefs ?: return
         val bundleJson = p.getString("pet_stats_bundle", null) ?: return
@@ -326,7 +343,7 @@ class BleForegroundService : Service() {
             val happinessGainRate = org_json.optDouble("happinessGainRate", 0.0001389)
             val threshold = org_json.optDouble("lowWellbeingThreshold", 0.25)
 
-            val isSynced = p.getBoolean(PREF_CONNECTED, false) && bioProcessor.humanDetected
+            val isSynced = p.getBoolean(PREF_CONNECTED, false) && presenceDetected()
 
             hunger = max(0.0, hunger - hungerDecayRate * elapsedSec)
             if (isSynced && hunger >= 0.25) {
@@ -515,7 +532,7 @@ class BleForegroundService : Service() {
                 if (wakeLock?.isHeld != true) wakeLock?.acquire()
                 // persist connected state
                 try { prefs?.edit()?.putBoolean(PREF_CONNECTED, true)?.apply() } catch (e: Exception) {}
-                sendStatusBroadcast(true, bioProcessor.humanDetected)
+                sendStatusBroadcast(true, presenceDetected())
                 try {
                     val nm = getSystemService(NotificationManager::class.java)
                     nm.notify(2001, buildNotification("Connected"))
@@ -524,6 +541,11 @@ class BleForegroundService : Service() {
                 g.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (e: Exception) {}
+                // Clear sticky type so a swapped sensor is re-detected on next connect,
+                // and reset the temp processor so a stale grace window can't fake presence
+                // on reconnect (mirrors device_service.dart's disconnect reset).
+                activeSensorBytes = 0
+                tempProcessor.reset()
                 sendStatusBroadcast(false, false)
                 try {
                     val nm = getSystemService(NotificationManager::class.java)
@@ -580,7 +602,11 @@ class BleForegroundService : Service() {
             try {
                 val bytes = characteristic.value
                 lastBytes = bytes
-                
+                // Latch sticky sensor type on first packet (ADR 0006).
+                if (activeSensorBytes == 0 && (bytes.size == 14 || bytes.size == 16)) {
+                    activeSensorBytes = bytes.size
+                }
+
                 // Ported Bio-Signal Processing
                 if (bytes.size == 16) {
                     try {
@@ -604,6 +630,15 @@ class BleForegroundService : Service() {
                         bioProcessor.process(rawIr, rawRed)
                     } catch (e: Exception) {
                         if (DATA_LOG) Log.e("BleForegroundService", "PPG process error: $e")
+                    }
+                } else if (bytes.size == 14) {
+                    // GY906 temperature: object temp raw is the last Int16 (bytes 12-13).
+                    try {
+                        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                        val rawTemp = buffer.getShort(12).toInt() and 0xFFFF
+                        tempProcessor.process(rawTemp)
+                    } catch (e: Exception) {
+                        if (DATA_LOG) Log.e("BleForegroundService", "Temp process error: $e")
                     }
                 }
 
@@ -984,6 +1019,77 @@ class BioSignalProcessor(private val context: Context) {
             .putBoolean("native_human_detected", humanDetected)
             .putInt("last_bpm", lastValidBpm)
             .putInt("last_spo2", lastValidSpO2)
+            .apply()
+    }
+}
+
+/**
+ * Native counterpart of lib/services/device/temperature_signal_processor.dart for
+ * the GY906 (MLX90614) IR temperature sensor.
+ *
+ * Human presence is inferred from forearm skin-surface temperature (29.7-41 C),
+ * sustained for ~0.5 s, with a 15 s grace window mirroring [BioSignalProcessor]
+ * so background sync bridging behaves identically across sensor types. Strict
+ * (always-on) only: the lenient duty-cycle profile is a Dart-side concept and is
+ * not ported, since current firmware keeps the sensor always on.
+ */
+class TemperatureSignalProcessor(private val context: Context) {
+    // Forearm skin-surface human range (cooler than core body temperature).
+    private val minHumanTemp = 29.7
+    private val maxHumanTemp = 41.0
+    // Sustained samples before presence latches (~0.5 s at ~100 Hz), Dart parity.
+    private val sustainedThreshold = 50
+    // Grace window matching BioSignalProcessor's 15 s effective-detected hold.
+    private val graceWindowMs = 15000L
+
+    // Volatile: process() runs on the BLE callback thread (~100 Hz); evaluateGracePeriod(),
+    // reset() and the humanDetected read run on the 1 Hz sync-timer / main thread.
+    @Volatile private var consecutiveValidSamples = 0
+    @Volatile private var lastHumanDetectedTimeMs = 0L
+
+    @Volatile var humanDetected = false
+        private set
+
+    private fun rawToCelsius(raw: Int): Double = raw * 0.02 - 273.15
+
+    fun process(rawTemp: Int) {
+        // rawTemp == 0 is the firmware error flag (converts to absolute zero):
+        // sensor disconnected or malfunctioning. Strict mode treats it as absent.
+        if (rawTemp == 0) {
+            consecutiveValidSamples = 0
+            updateDetected(false)
+            return
+        }
+
+        val tempCelsius = rawToCelsius(rawTemp)
+        val inHumanRange = tempCelsius in minHumanTemp..maxHumanTemp
+
+        if (inHumanRange) consecutiveValidSamples++ else consecutiveValidSamples = 0
+
+        val newHumanDetected = inHumanRange && consecutiveValidSamples >= sustainedThreshold
+        if (newHumanDetected) lastHumanDetectedTimeMs = System.currentTimeMillis()
+
+        val effectivelyDetected =
+            newHumanDetected || (System.currentTimeMillis() - lastHumanDetectedTimeMs < graceWindowMs)
+        updateDetected(effectivelyDetected)
+    }
+
+    fun evaluateGracePeriod() {
+        val effectivelyDetected = System.currentTimeMillis() - lastHumanDetectedTimeMs < graceWindowMs
+        if (humanDetected && !effectivelyDetected) updateDetected(false)
+    }
+
+    fun reset() {
+        consecutiveValidSamples = 0
+        lastHumanDetectedTimeMs = 0L
+        updateDetected(false)
+    }
+
+    private fun updateDetected(value: Boolean) {
+        if (value == humanDetected) return
+        humanDetected = value
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("native_human_detected", humanDetected)
             .apply()
     }
 }
