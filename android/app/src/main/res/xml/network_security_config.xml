@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cloud telemetry endpoint is plain HTTP (no TLS on backend yet). Android
+     blocks cleartext traffic by default for targetSdk 28+, which was silently
+     dropping every native (Kotlin) sync_status POST. Scoped to the known
+     ThingsBoard relay IP instead of a blanket app-wide allow. If the
+     Advanced Settings cloud_base_url is ever pointed at a different host,
+     add it here too. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">200.13.5.20</domain>
+    </domain-config>
+</network-security-config>

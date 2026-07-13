@@ -106,9 +106,11 @@ class CloudManager(private val context: Context) {
             OutputStreamWriter(conn.outputStream).use { it.write(event.toString()) }
 
             val responseCode = conn.responseCode
-            return responseCode in 200..299
+            val ok = responseCode in 200..299
+            if (!ok) Log.w("CloudManager", "POST ${event.optString("eventType")} rejected: HTTP $responseCode")
+            return ok
         } catch (e: Exception) {
-            Log.e("CloudManager", "Failed to POST: ${e.message}")
+            Log.e("CloudManager", "Failed to POST ${event.optString("eventType")}: ${e.message}")
             return false
         }
     }

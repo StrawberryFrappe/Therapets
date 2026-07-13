@@ -51,6 +51,7 @@ class BleForegroundService : Service() {
         const val PET_ALERTS_CHANNEL = "pet_alerts"
         const val PET_CARE_INTERVAL_MS = 60_000L  // check every 60 seconds
         const val PET_ALERT_COOLDOWN_MS = 30 * 60_000L  // 30 min between alerts
+        const val OFFLINE_PING_LIMIT = 2  // consecutive disconnected minutes reported before going quiet
     }
 
     private var adapter: BluetoothAdapter? = null
@@ -76,6 +77,9 @@ class BleForegroundService : Service() {
     private var isConnectedThisMinute = false
     private var bpmReadings = mutableListOf<Int>()
     private var spo2Readings = mutableListOf<Int>()
+    // Consecutive fully-disconnected minutes; first couple still get reported so the
+    // backend sees the device went offline instead of the stream just stopping.
+    private var consecutiveDisconnectedMinutes = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -266,18 +270,23 @@ class BleForegroundService : Service() {
                     secondsTick++
                     if (secondsTick >= 60) {
                         if (isConnectedThisMinute) {
+                            consecutiveDisconnectedMinutes = 0
                             val synced = syncedSecondsThisMinute > 30
                             val currentSyncedMinutes = prefs?.getInt("synced_minutes_today", 0) ?: 0
                             if (synced) prefs?.edit()?.putInt("synced_minutes_today", currentSyncedMinutes + 1)?.apply()
-                            
+
                             val avgBpm = if (bpmReadings.isNotEmpty()) bpmReadings.average().toInt() else null
                             val avgSpo2 = if (spo2Readings.isNotEmpty()) spo2Readings.average().toInt() else null
                             cloudManager.logSyncStatus(synced, avgBpm, avgSpo2, null)
                         } else {
                             val enableOfflineLogs = prefs?.getBoolean("enable_disconnected_cloud_logs", false) == true
-                            if (enableOfflineLogs) {
+                            // Always report the first couple of disconnected minutes so the backend sees
+                            // an explicit "went offline" edge instead of the stream silently stopping;
+                            // suppress after that to avoid a device sitting on a shelf spamming all day.
+                            if (enableOfflineLogs || consecutiveDisconnectedMinutes < OFFLINE_PING_LIMIT) {
                                 cloudManager.logSyncStatus(false, null, null, null)
                             }
+                            consecutiveDisconnectedMinutes++
                         }
 
                         MissionManager.evaluateMissions(this@BleForegroundService, cloudManager)
