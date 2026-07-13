@@ -77,16 +77,26 @@ class AppBootstrapper {
     petStats.markReady();
 
     // 3. Initialize Services that depend on others
+    // TreatmentService's cached quota (usageTimeSeconds) feeds the Sync Master
+    // mission target, so its local-cache load must land before
+    // MissionService.init() generates today's missions.
+    final treatmentService = TreatmentService();
+    try {
+      await treatmentService.init().timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('[Bootstrapper] TreatmentService init failed: $e');
+    }
+
     final missionService = MissionService(cloudService: cloudService);
     try {
       await missionService.init(petStats).timeout(const Duration(seconds: 5));
-      
+
       // Rehydrate background progress for missions (e.g. sync duration)
       final lastUpdateMs = petStats.lastUpdateTime.millisecondsSinceEpoch;
       final now = DateTime.now().millisecondsSinceEpoch;
       final elapsedSec = (now - lastUpdateMs) / 1000.0;
       final isSynced = deviceService.currentDisplayStatus == DeviceDisplayStatus.synced;
-      
+
       await missionService.rehydrateBackgroundProgress(elapsedSec, isSynced);
     } catch (e) {
       debugPrint('[Bootstrapper] MissionService init failed: $e');
@@ -94,12 +104,6 @@ class AppBootstrapper {
 
     final notificationService = PetNotificationService(localeService: localeService);
 
-    final treatmentService = TreatmentService();
-    try {
-      await treatmentService.init().timeout(const Duration(seconds: 3));
-    } catch (e) {
-      debugPrint('[Bootstrapper] TreatmentService init failed: $e');
-    }
     // Fire-and-forget network fetch — don't let a slow/unreachable backend
     // stall app launch; the menu falls back to fail-open until this lands.
     treatmentService.refresh();
