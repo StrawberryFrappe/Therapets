@@ -135,7 +135,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gameFlappyBobDesc => 'Shake or tap to fly!';
 
   @override
-  String get gameOrchestra => 'Orchestra';
+  String get gameOrchestra => 'Theremin';
 
   @override
   String get gameOrchestraDesc => 'Make your pets sing!';
@@ -504,4 +504,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String sbrCalibrationStep(int current, int total) {
     return 'Step $current of $total';
   }
+
+  @override
+  String get sbrUpwardSpeedTitle => 'SBR Upward Speed';
+
+  @override
+  String get sbrUpwardSpeedDesc =>
+      'Make the ball ascend faster than it descends. Adjust to taste.';
+
+  @override
+  String get lenientSensorModeTitle => 'Lenient Sensor Mode';
+
+  @override
+  String get lenientSensorModeDesc =>
+      'Enable ONLY for old devices whose firmware turns the sensor on and off every ~10s to save battery. Off (default) = new always-on firmware, faster and more accurate presence.';
+
+  @override
+  String get lenientSensorModeSwitch => 'Lenient (old battery-saving firmware)';
+
+  @override
+  String get orchestraHeightSensingTitle => 'Theremin Height Sensing';
+
+  @override
+  String get orchestraHeightSensingDesc =>
+      'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.';
 }

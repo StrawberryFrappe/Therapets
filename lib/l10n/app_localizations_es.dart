@@ -135,10 +135,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get gameFlappyBobDesc => '¡Sacude o toca para volar!';
 
   @override
-  String get gameOrchestra => 'Orquesta';
+  String get gameOrchestra => 'Theremín';
 
   @override
-  String get gameOrchestraDesc => 'Make your pets sing!';
+  String get gameOrchestraDesc => '¡Haz que tus mascotas canten!';
 
   @override
   String get gameDonut => 'donut.dart';
@@ -508,4 +508,29 @@ class AppLocalizationsEs extends AppLocalizations {
   String sbrCalibrationStep(int current, int total) {
     return 'Paso $current de $total';
   }
+
+  @override
+  String get sbrUpwardSpeedTitle => 'Velocidad de Ascenso SBR';
+
+  @override
+  String get sbrUpwardSpeedDesc =>
+      'Haz que la bola suba más rápido de lo que baja. Ajusta a tu gusto.';
+
+  @override
+  String get lenientSensorModeTitle => 'Modo de Sensor Tolerante';
+
+  @override
+  String get lenientSensorModeDesc =>
+      'Actívalo SOLO para dispositivos antiguos cuyo firmware enciende y apaga el sensor cada ~10s para ahorrar batería. Desactivado (predeterminado) = firmware nuevo siempre encendido, más rápido y preciso.';
+
+  @override
+  String get lenientSensorModeSwitch =>
+      'Tolerante (firmware antiguo de ahorro de batería)';
+
+  @override
+  String get orchestraHeightSensingTitle => 'Detección de Altura del Theremín';
+
+  @override
+  String get orchestraHeightSensingDesc =>
+      'Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía.';
 }

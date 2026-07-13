@@ -46,7 +46,8 @@
   "play": "JUGAR",
   "gameFlappyBob": "Flappy Bob",
   "gameFlappyBobDesc": "¡Sacude o toca para volar!",
-  "gameOrchestra": "Orquesta",
+  "gameOrchestra": "Theremín",
+  "gameOrchestraDesc": "¡Haz que tus mascotas canten!",
   "gameDonutDesc": "Pastelería sin gravedad",
   "gameSbr": "SBR",
   "gameSbrDesc": "Breakout con un giro",
@@ -185,5 +186,13 @@
   "sbrCalibrationCenter": "Mantén el brazo recto y toca para confirmar",
   "sbrCalibrationLeft": "Gira la muñeca a la izquierda al máximo y toca para confirmar",
   "sbrCalibrationRight": "Gira la muñeca a la derecha al máximo y toca para confirmar",
-  "sbrCalibrationStep": "Paso {current} de {total}"
+  "sbrCalibrationStep": "Paso {current} de {total}",
+
+  "sbrUpwardSpeedTitle": "Velocidad de Ascenso SBR",
+  "sbrUpwardSpeedDesc": "Haz que la bola suba más rápido de lo que baja. Ajusta a tu gusto.",
+  "lenientSensorModeTitle": "Modo de Sensor Tolerante",
+  "lenientSensorModeDesc": "Actívalo SOLO para dispositivos antiguos cuyo firmware enciende y apaga el sensor cada ~10s para ahorrar batería. Desactivado (predeterminado) = firmware nuevo siempre encendido, más rápido y preciso.",
+  "lenientSensorModeSwitch": "Tolerante (firmware antiguo de ahorro de batería)",
+  "orchestraHeightSensingTitle": "Detección de Altura del Theremín",
+  "orchestraHeightSensingDesc": "Cómo el minijuego Theremín convierte la altura del brazo en tono. Fusionado (predeterminado) combina movimiento + inclinación; Ángulo es el más estable; Altura es el más fiel pero se desvía."
 }

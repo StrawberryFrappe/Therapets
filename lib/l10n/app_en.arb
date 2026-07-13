@@ -51,7 +51,7 @@
   "play": "PLAY",
   "gameFlappyBob": "Flappy Bob",
   "gameFlappyBobDesc": "Shake or tap to fly!",
-  "gameOrchestra": "Orchestra",
+  "gameOrchestra": "Theremin",
   "gameOrchestraDesc": "Make your pets sing!",
   "gameDonut": "donut.dart",
   "gameDonutDesc": "Zero gravity pastry",
@@ -205,5 +205,13 @@
   "sbrCalibrationLeft": "Turn wrist max left and tap to confirm",
   "sbrCalibrationRight": "Turn wrist max right and tap to confirm",
   "sbrCalibrationStep": "Step {current} of {total}",
-  "@sbrCalibrationStep": { "placeholders": { "current": { "type": "int" }, "total": { "type": "int" } } }
+  "@sbrCalibrationStep": { "placeholders": { "current": { "type": "int" }, "total": { "type": "int" } } },
+
+  "sbrUpwardSpeedTitle": "SBR Upward Speed",
+  "sbrUpwardSpeedDesc": "Make the ball ascend faster than it descends. Adjust to taste.",
+  "lenientSensorModeTitle": "Lenient Sensor Mode",
+  "lenientSensorModeDesc": "Enable ONLY for old devices whose firmware turns the sensor on and off every ~10s to save battery. Off (default) = new always-on firmware, faster and more accurate presence.",
+  "lenientSensorModeSwitch": "Lenient (old battery-saving firmware)",
+  "orchestraHeightSensingTitle": "Theremin Height Sensing",
+  "orchestraHeightSensingDesc": "How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts."
 }

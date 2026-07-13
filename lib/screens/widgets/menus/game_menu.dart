@@ -42,7 +42,7 @@ class GameMenu extends StatelessWidget {
     ),
     GameMenuItem(
       id: 'orchestra',
-      name: 'Orchestra',
+      name: 'Theremin',
       description: 'Make your pets sing!',
       icon: Icons.music_note,
       color: Color(0xFF9C27B0),

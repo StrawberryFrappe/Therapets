@@ -199,7 +199,6 @@ class DeviceService {
 
     _nativeBpmSub = _bluetooth.nativeBpm$.listen((bpm) {
       if (bpm > 0) {
-        if (_deviceType == DeviceType.unknown) _deviceType = DeviceType.max30100;
         _cachedNativeBpm = bpm;
         _tryPreSeed();
       }
@@ -296,9 +295,6 @@ class DeviceService {
       _cachedNativeHumanDetected = true;
       _cachedNativeBpm = _bluetooth.nativeBpm;
       _cachedNativeSpo2 = _bluetooth.nativeSpo2;
-      if (_cachedNativeBpm > 0 && _deviceType == DeviceType.unknown) {
-        _deviceType = DeviceType.max30100;
-      }
       _tryPreSeed();
     }
     

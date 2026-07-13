@@ -45,7 +45,7 @@ class _OrchestraScreenState extends State<OrchestraScreen> {
   Widget build(BuildContext context) {
     return MinigameScreen(
       config: const MinigameConfig(
-        title: 'Pet Orchestra',
+        title: 'Pet Theremin',
         keepScreenOn: true,
         forcedOrientations: [
           DeviceOrientation.landscapeLeft,

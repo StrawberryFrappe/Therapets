@@ -329,7 +329,7 @@ abstract class AppLocalizations {
   /// No description provided for @gameOrchestra.
   ///
   /// In en, this message translates to:
-  /// **'Orchestra'**
+  /// **'Theremin'**
   String get gameOrchestra;
 
   /// No description provided for @gameOrchestraDesc.
@@ -997,6 +997,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Step {current} of {total}'**
   String sbrCalibrationStep(int current, int total);
+
+  /// No description provided for @sbrUpwardSpeedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SBR Upward Speed'**
+  String get sbrUpwardSpeedTitle;
+
+  /// No description provided for @sbrUpwardSpeedDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Make the ball ascend faster than it descends. Adjust to taste.'**
+  String get sbrUpwardSpeedDesc;
+
+  /// No description provided for @lenientSensorModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lenient Sensor Mode'**
+  String get lenientSensorModeTitle;
+
+  /// No description provided for @lenientSensorModeDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable ONLY for old devices whose firmware turns the sensor on and off every ~10s to save battery. Off (default) = new always-on firmware, faster and more accurate presence.'**
+  String get lenientSensorModeDesc;
+
+  /// No description provided for @lenientSensorModeSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Lenient (old battery-saving firmware)'**
+  String get lenientSensorModeSwitch;
+
+  /// No description provided for @orchestraHeightSensingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Theremin Height Sensing'**
+  String get orchestraHeightSensingTitle;
+
+  /// No description provided for @orchestraHeightSensingDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'How the Theremin minigame turns arm height into pitch. Fused (default) blends motion + tilt; Angle is the most stable; Height is truest but drifts.'**
+  String get orchestraHeightSensingDesc;
 }
 
 class _AppLocalizationsDelegate

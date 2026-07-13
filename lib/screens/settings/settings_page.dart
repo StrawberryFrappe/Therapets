@@ -414,15 +414,14 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 12),
           // SBR Upward Speed Multiplier
           Card(
-            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('SBR Upward Speed', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(AppLocalizations.of(context)!.sbrUpwardSpeedTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  Text('Make the ball ascend faster than it descends. Adjust to taste.', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(AppLocalizations.of(context)!.sbrUpwardSpeedDesc, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   Slider(
                     value: _sbrUpwardMultiplier,
                     min: 1.0,
@@ -442,23 +441,20 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 12),
           // Presence Mode (device firmware sensor duty-cycle handling)
           Card(
-            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Lenient Sensor Mode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(AppLocalizations.of(context)!.lenientSensorModeTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Enable ONLY for old devices whose firmware turns the sensor on and off '
-                    'every ~10s to save battery. Off (default) = new always-on firmware, '
-                    'faster and more accurate presence.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  Text(
+                    AppLocalizations.of(context)!.lenientSensorModeDesc,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Lenient (old battery-saving firmware)', style: TextStyle(fontSize: 12)),
+                    title: Text(AppLocalizations.of(context)!.lenientSensorModeSwitch, style: const TextStyle(fontSize: 12)),
                     value: _presenceMode == PresenceMode.lenient,
                     onChanged: (on) => _savePresenceMode(on ? PresenceMode.lenient : PresenceMode.strict),
                   ),
@@ -468,19 +464,16 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
 
           Card(
-            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Orchestra Height Sensing', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(AppLocalizations.of(context)!.orchestraHeightSensingTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  const Text(
-                    'How the Orchestra minigame turns arm height into pitch. Fused '
-                    '(default) blends motion + tilt; Angle is the most stable; Height '
-                    'is truest but drifts.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  Text(
+                    AppLocalizations.of(context)!.orchestraHeightSensingDesc,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -541,8 +534,6 @@ class _SettingsPageState extends State<SettingsPage> {
             // Raw Data Terminal Button
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[900],
-                foregroundColor: Colors.white,
                 side: const BorderSide(width: 2, color: Colors.black),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),

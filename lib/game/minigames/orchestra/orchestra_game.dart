@@ -348,7 +348,7 @@ class TitleDisplay extends PositionComponent {
   void render(Canvas canvas) {
     final textPainter = TextPainter(
       text: const TextSpan(
-        text: '🎵 Pet Orchestra 🎵',
+        text: '🎵 Pet Theremin 🎵',
         style: TextStyle(
           color: Color(0xFFFFFFFF),
           fontSize: 28,

@@ -331,3 +331,91 @@ _(Branch strategy resolved: `main` stable / `dev` nightly / `unstable` experimen
 - Local storage = SharedPreferences atomic JSON bundles. **Hive forbidden.**
 - No `permission_handler`; use platform prompts.
 - State management = `provider`.
+
+---
+
+## 6. Orchestra/Theremin + Advanced Settings — backlog register (2026-07-12)
+
+Owner playtest on latest `unstable` build surfaced 7 distinct issues. **Investigation only —
+not fixed this session.** Deliberately split into separate items so each can be picked up in
+its own session/dynamic-workflow slice instead of one broad sweep (risk of context corruption /
+agentic drift given how many unrelated files this touches). Supersedes/details the terse
+"Orchestra rework" stretch bullet in Phase 7 above.
+
+- [x] **6.1 — Orchestra settings audit — DONE 2026-07-12.** Confirmed all 20 constants below are
+  still live (MIDI root/span/snap, freq clamp band, audio gate hysteresis, change-detection
+  thresholds, auto-calibrate hysteresis, telemetry watchdog, glide factor in `orchestra_game.dart`;
+  complementary-filter/swing constants in `height_estimator.dart`; buffer/rate bounds in
+  `tone_player.dart`). **Verdict: audit-only, no new UI added.** All 20 are DSP/audio-engine
+  internals (filter coefficients, hysteresis bands, buffer sizes, watchdog timers) — none read as
+  a genuine player-facing setting the way `orchestraHeightMode` (`settings_page.dart`, the one
+  existing control) does; exposing them would let a player break the instrument into an unusable
+  state, not tune it. Closed as audit-complete; revisit only if a specific control is requested.
+  - `orchestra_game.dart:42-46` — `MusicScale` root MIDI (57) / span octaves (2) / snap
+    strength (0.85)
+  - `orchestra_game.dart:151-152` — frequency clamp band (MIDI 45–93)
+  - `orchestra_game.dart:245` — audio gate hysteresis (0.03/0.06)
+  - `orchestra_game.dart:257-258` — change-detection thresholds (0.5 Hz / 0.01 vol)
+  - `orchestra_game.dart:285-288` — auto-calibrate hysteresis (45°/s gyro, 0.5–2.0g, 15-sample)
+  - `orchestra_game.dart:310` — telemetry stale watchdog (400ms)
+  - `orchestra_game.dart:315` — glide factor (dt×12.0)
+  - `height_estimator.dart:60-73` — gravityAlpha/velocityLeak/dispLeak/complementaryK/swing
+    attack-release/angle+height range constants
+  - `tone_player.dart:26-32` — sample rate, buffer duration, base freq, playback-rate bounds
+
+- [!] **6.2 — Orchestra input latency — DEFERRED, moved to GitHub issue #39.** Owner call
+  2026-07-12: not blocking (nothing breaks, just feels slow), boss won't care — pull off the
+  active queue, leave for a later batch/next person. Pipeline trace + file:line detail kept
+  here (not duplicated in the public issue): `device_service.dart:241-248` telemetry stream →
+  `orchestra_game.dart:272-301 _onTelemetry` (per BLE packet, ~50-100ms typical) →
+  `height_estimator.dart:125-173 update(dt)` (gravity LPF α0.9, complementary fusion K0.02,
+  swing attack/release 0.3/0.05) → `music_scale.dart:115-140 map(h)` (snap 0.85) →
+  `orchestra_game.dart:304-318 update(dt)` per-frame glide (dt×12.0) + hysteresis →
+  `tone_player.dart:50-54 _run()` Future-chain-serialized platform channel calls
+  (`_doStart` at 68-82). Needs on-device latency measurement before touching anything.
+
+- [x] **6.3 — Rename display "Orchestra" → "Theremin" — DONE 2026-07-12.** Renamed:
+  `orchestra_screen.dart:48` title, `orchestra_game.dart:351` in-game title text,
+  `l10n/app_en.arb`/`app_es.arb` `gameOrchestra` (also added the previously-missing ES
+  `gameOrchestraDesc`), `game_menu.dart` menu entry label, plus the "Orchestra Height Sensing"
+  card title/description in `settings_page.dart` (now localized, see 6.6 — landed as "Theremin
+  Height Sensing" / "Detección de Altura del Theremín"). `flutter gen-l10n` re-run. Kept as-is
+  (internal): `OrchestraGame`/`OrchestraScreen` classes, `orchestraHeightMode` field,
+  `'orchestra'` game-ID routing string, directory name, `HeightMode`/`ScaleType` enums.
+
+- [ ] **6.4 — Orchestra UI rebuild from scratch.** Owner's judgment: patch-level fixes aren't
+  enough, the interaction/UI needs a redesign (echoes existing Phase 7 note: movement-cursor +
+  gesture-as-orders "went horrible"). Own phase, sequenced **after** 6.1/6.2 are scoped (redesign
+  should account for which settings become real controls and what the latency budget is).
+
+- [x] **6.5 — Advanced Settings: wrong sensor button shown — FIXED 2026-07-12, unverified on
+  hardware.** Root cause confirmed: two premature `_deviceType = DeviceType.max30100` writes in
+  `device_service.dart` (one in the native-BPM listener, one in `init()`'s post-connect re-verify
+  block) raced ahead of the correct packet-size sniff (`:252-258`, 16 bytes→max30100 /
+  14 bytes→gy906), so a GY906 (temp) device receiving a native BPM value before its first raw
+  packet got locked to `max30100`. Neither write was needed — `_tryPreSeed()`, the only thing
+  those callbacks feed, never reads `_deviceType`. Both removed; packet-size sniff is now the
+  sole source of truth, matching the field's own "sticky - determined by first packet" comment.
+  `flutter analyze`/`flutter test` (79 tests) clean. **Not yet re-tested on real GY906 hardware**
+  — do this during the Phase 6 S3 verification pass (device-switch sticky-type re-test item).
+
+- [x] **6.6 — Advanced Settings: black cards clash + English-only — DONE 2026-07-12.** Removed
+  hardcoded `Colors.grey[900]` from the 3 Cards (SBR Upward Speed / Lenient Sensor Mode /
+  Theremin Height Sensing) and the Raw Data Terminal button (+ its paired
+  `foregroundColor: Colors.white`) — all now inherit the app's default light theme, consistent
+  with the rest of the page. Localized the 7 hardcoded-English strings via 7 new
+  `AppLocalizations` keys (EN + ES) in `app_en.arb`/`app_es.arb`, `flutter gen-l10n` re-run.
+
+- [ ] **6.7 — SBR minigame assumes left-arm play, no handedness option.** Fixed sign convention,
+  not configurable: `motion_calibrator.dart:36` (`-data.ax` hardcoded roll sign), `:49-50`
+  `confirmLeft` / `:54-66` `confirmRight` two-phase calibration, `:74-84` `mapAngleToScreenX`
+  (left→left edge, right→right edge); `calibration_overlay.dart:14-15,59-60,63-66` (UI prompts
+  "tilt wrist max left" then "max right"); `sbr_game.dart:87-94 _onTelemetry` applies roll→screenX
+  with no inversion. Confirmed no existing handedness/invert/mirror setting anywhere in `lib/`
+  (`game_settings.dart` only has `sbrUpwardSpeedMultiplier`, `orchestraHeightMode`). Fix shape:
+  add a handedness field to `GameSettings` + invert the roll sign / swap calibration-phase
+  labels in `motion_calibrator.dart`. Medium, 1 session, needs device testing both-handed.
+
+**Acceptance for this register:** each item above is independently pickable in its own
+session/workflow slice; none has been implemented yet. Owner to prioritize/sequence at next
+review — not implied to follow the 6.1→6.7 order above.
