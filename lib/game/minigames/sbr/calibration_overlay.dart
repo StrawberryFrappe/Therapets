@@ -93,14 +93,25 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
     }
   }
 
+  /// Which reference pose matches each phase for the current handedness.
+  ///
+  /// The right-arm board is mirror-mounted: rotating the whole orthosis 180
+  /// about the forearm's long axis puts the M5Stick back in the same
+  /// position, so the pose that reaches a given sensor extreme is inverted
+  /// (left-board palm-up ≡ right-board palm-down for the same reading) —
+  /// confirmed by an on-device playtest. So the up/down asset pairing swaps
+  /// per phase for `right`; the instruction text does not need to change,
+  /// since "turn wrist max left/right" already means the same physical
+  /// thing regardless of which board is worn.
   String _getImageAsset() {
+    final isRight = GameSettings.sbrHandedness == Handedness.right;
     switch (_calibrator.state) {
       case CalibrationState.calibratingLeft:
-        return 'assets/images/armfacingup.png';
+        return isRight ? 'assets/images/armfacingdown.png' : 'assets/images/armfacingup.png';
       case CalibrationState.calibratingRight:
-        return 'assets/images/armfacingdown.png';
+        return isRight ? 'assets/images/armfacingup.png' : 'assets/images/armfacingdown.png';
       default:
-        return 'assets/images/armfacingup.png';
+        return isRight ? 'assets/images/armfacingdown.png' : 'assets/images/armfacingup.png';
     }
   }
 
@@ -135,20 +146,10 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
             child: IgnorePointer(
               child: Opacity(
                 opacity: 0.8,
-                child: Transform(
-                  alignment: Alignment.center,
-                  // Mirror the arm reference art for the right-arm board,
-                  // whose orthosis is mounted as a mirror image of the left.
-                  transform: Matrix4.diagonal3Values(
-                    GameSettings.sbrHandedness == Handedness.right ? -1.0 : 1.0,
-                    1.0,
-                    1.0,
-                  ),
-                  child: Image.asset(
-                    _getImageAsset(),
-                    fit: BoxFit.contain,
-                    height: MediaQuery.of(context).size.height * 0.4,
-                  ),
+                child: Image.asset(
+                  _getImageAsset(),
+                  fit: BoxFit.contain,
+                  height: MediaQuery.of(context).size.height * 0.4,
                 ),
               ),
             ),
