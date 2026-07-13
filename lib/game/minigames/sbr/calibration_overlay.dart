@@ -146,10 +146,22 @@ class _CalibrationOverlayState extends State<CalibrationOverlay> {
             child: IgnorePointer(
               child: Opacity(
                 opacity: 0.8,
-                child: Image.asset(
-                  _getImageAsset(),
-                  fit: BoxFit.contain,
-                  height: MediaQuery.of(context).size.height * 0.4,
+                child: Transform(
+                  alignment: Alignment.center,
+                  // Base art depicts a left arm. Right-handed pose is
+                  // already picked correctly by _getImageAsset(), but the
+                  // pixels still need a horizontal flip so a real right arm
+                  // doing that pose doesn't look like a mirrored left arm.
+                  transform: Matrix4.diagonal3Values(
+                    GameSettings.sbrHandedness == Handedness.right ? -1.0 : 1.0,
+                    1.0,
+                    1.0,
+                  ),
+                  child: Image.asset(
+                    _getImageAsset(),
+                    fit: BoxFit.contain,
+                    height: MediaQuery.of(context).size.height * 0.4,
+                  ),
                 ),
               ),
             ),
