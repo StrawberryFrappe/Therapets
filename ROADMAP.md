@@ -9,7 +9,26 @@
 >
 > **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (see note)
 >
-> _Last updated: 2026-07-12_
+> _Last updated: 2026-07-13_
+
+---
+
+## Landed 2026-07-13 — Telemetry contract v2 (branch `feat/telemetry-contract-v2` → `unstable`)
+
+Mobile-side fixes from the `prosthetic-api` telemetry review (§1–10). Envelope is now
+single-`payload` ThingsBoard shape (`ts` + `values.payload`) with `eventType`/`eventId`
+inside; native `CloudManager` queue is bounded (5000), batched (≤50) with exponential
+backoff + connectivity-triggered flush; `mission_completed` is native-only (killed the
+Dart double-publish); synced tally uses no-grace clinical presence (enforces ADR-0007);
+GY906 sends `avgTemp`; UI shows the real native queue; base-URL host validation added.
+Wire format + native details in `docs/telemetria.md` / `docs/en/telemetry.md` and
+`docs/capa_nativa.md` / `docs/en/native_layer.md`; ADR-0007 addendum.
+
+- [!] **Backend lockstep required.** The single-`payload` envelope needs `prosthetic-api`
+      updated in the same deploy — old backend can't read it. Coordinate before shipping.
+- [x] Closes #40 (dead Dart sync code) and #41 (unbounded native queue).
+- [ ] Real-hardware/live-ThingsBoard verification of the offline→correct-clinical-day path
+      still outstanding (gated on the backend deploy above).
 
 ---
 

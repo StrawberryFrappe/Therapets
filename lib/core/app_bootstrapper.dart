@@ -87,7 +87,7 @@ class AppBootstrapper {
       debugPrint('[Bootstrapper] TreatmentService init failed: $e');
     }
 
-    final missionService = MissionService(cloudService: cloudService);
+    final missionService = MissionService();
     try {
       await missionService.init(petStats).timeout(const Duration(seconds: 5));
 

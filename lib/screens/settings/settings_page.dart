@@ -305,8 +305,14 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Text(AppLocalizations.of(context)!.cancel),
           ),
           ElevatedButton(
-            onPressed: () {
-              _saveCloudConfig(urlController.text, tokenController.text);
+            onPressed: () async {
+              // §10: block saving http URLs outside the allowlist.
+              final error = CloudService.validateBaseUrl(urlController.text);
+              if (error != null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(error)));
+                return;
+              }
+              await _saveCloudConfig(urlController.text, tokenController.text);
               Navigator.of(ctx).pop();
             },
             child: Text(AppLocalizations.of(context)!.save),
@@ -400,10 +406,9 @@ class _SettingsPageState extends State<SettingsPage> {
             baseUrl: _cloudBaseUrl,
             deviceToken: _cloudDeviceToken,
             onConfigure: _showCloudConfigDialog,
-            onFlushQueue: () async {
-              await _cloud.flushQueue();
-              setState(() {}); // Refresh pending count
-            },
+            // CloudSyncSection owns the native flush; this just refreshes parent
+            // state so we don't fire flushNativeQueue twice per tap.
+            onFlushQueue: () => setState(() {}),
           ),
           const SizedBox(height: 12),
           

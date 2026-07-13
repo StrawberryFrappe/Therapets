@@ -24,7 +24,7 @@ Kotlin**. Archivos en
 | `MainActivity.kt` | Entrada Flutter; expone `MethodChannel`/`EventChannel` para hablar con Dart. |
 | `BleForegroundService.kt` | Servicio *foreground* que mantiene la conexión BLE persistente y procesa telemetría aunque la UI esté muerta. |
 | `MissionManager.kt` | Evalúa el progreso de misiones en nativo (sobrevive a la suspensión de Flutter). |
-| `CloudManager.kt` | Encola y agrega telemetría por minuto del lado nativo. |
+| `CloudManager.kt` | Cola offline canónica: construye el sobre `ts`/`values.payload`, encola (dedup por `eventId`, cap 5000), envía por lotes (≤50, orden `ts`) con backoff exponencial, y expone conteo/último-sync/último-error a la UI. |
 | `BootReceiver.kt` | Recibe `BOOT_COMPLETED` y reanuda el servicio al arrancar el teléfono. |
 
 ## Por qué nativo
@@ -70,6 +70,32 @@ sequenceDiagram
   reinicios de la UI.
 - Al volver del segundo plano, `DeviceService.onAppResumed()` re-engancha el
   `EventChannel` y pide el estado canónico.
+
+### Métodos de cola nube (MethodChannel `sync_companion/bluetooth`)
+
+Añadidos el 2026-07-13 para que la UI muestre la cola **nativa** real (antes
+mostraba la cola Dart, que podía marcar 0 con miles de eventos nativos pendientes):
+
+| Método | Devuelve |
+|--------|----------|
+| `getCloudQueueCount` | `Int` — eventos pendientes en `CloudManager` |
+| `getLastCloudSync` | `Long` — epoch ms del último POST 2xx (0 si ninguno) |
+| `getLastCloudError` | `String` — último error de envío (`""` si ninguno) |
+| `flushCloudQueue` | dispara `CloudManager.flushQueue()` |
+
+## Presencia clínica vs. visual
+
+`BleForegroundService` mantiene **dos** nociones de presencia (ver
+[ADR-0007](adr/0007-truthful-telemetry-with-ux-grace.html)):
+
+- **Clínica (sin gracia):** `instantaneousDetected` — racha sostenida en rango, sin
+  la ventana de 15 s. Alimenta **solo** el conteo `syncedSecondsThisMinute` que el
+  backend convierte en tiempo de uso.
+- **Visual (con gracia de 15 s):** `humanDetected` — sigue alimentando UI, cuidado de
+  la mascota y progreso visual de misiones, para no parpadear con lecturas malas
+  momentáneas.
+
+El suavizado visual **no** debe inflar el registro clínico.
 
 ## Memoria compartida vía SharedPreferences
 

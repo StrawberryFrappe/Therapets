@@ -24,7 +24,7 @@ Kotlin service**. Files located at
 | `MainActivity.kt` | Flutter entry point; exposes `MethodChannel`/`EventChannel` to communicate with Dart. |
 | `BleForegroundService.kt` | *Foreground* service that keeps the BLE connection alive and processes telemetry even when the UI is dead. |
 | `MissionManager.kt` | Evaluates mission progress natively (survives Flutter suspension). |
-| `CloudManager.kt` | Queues and aggregates telemetry per minute on the native side. |
+| `CloudManager.kt` | Canonical offline queue: builds the `ts`/`values.payload` envelope, enqueues (dedup by `eventId`, cap 5000), sends in batches (≤50, `ts` order) with exponential backoff, and exposes count/last-sync/last-error to the UI. |
 | `BootReceiver.kt` | Receives `BOOT_COMPLETED` and resumes the service when the phone boots. |
 
 ## Why native
@@ -70,6 +70,31 @@ sequenceDiagram
   UI restarts.
 - On returning from the background, `DeviceService.onAppResumed()` re-hooks the
   `EventChannel` and requests the canonical state.
+
+### Cloud-queue methods (MethodChannel `sync_companion/bluetooth`)
+
+Added 2026-07-13 so the UI shows the real **native** queue (it previously showed the
+Dart queue, which could read 0 while thousands of native events were pending):
+
+| Method | Returns |
+|--------|---------|
+| `getCloudQueueCount` | `Int` — events pending in `CloudManager` |
+| `getLastCloudSync` | `Long` — epoch ms of the last 2xx POST (0 if none) |
+| `getLastCloudError` | `String` — last send error (`""` if none) |
+| `flushCloudQueue` | triggers `CloudManager.flushQueue()` |
+
+## Clinical vs. visual presence
+
+`BleForegroundService` keeps **two** notions of presence (see
+[ADR-0007](../adr/0007-truthful-telemetry-with-ux-grace.md)):
+
+- **Clinical (no grace):** `instantaneousDetected` — a sustained in-range streak,
+  without the 15 s window. Feeds **only** the `syncedSecondsThisMinute` tally that the
+  backend turns into usage time.
+- **Visual (15 s grace):** `humanDetected` — still feeds UI, pet-care and visual
+  mission progress, so it doesn't flicker on momentary bad readings.
+
+Visual smoothing must **not** inflate the clinical record.
 
 ## Shared memory via SharedPreferences
 

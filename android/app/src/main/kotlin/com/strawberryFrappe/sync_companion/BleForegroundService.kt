@@ -5,6 +5,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.IBinder
 import android.os.Build
 import android.os.PowerManager
@@ -77,12 +79,16 @@ class BleForegroundService : Service() {
     @Volatile private var activeSensorBytes = 0
     // Held only while GATT is connected, so the 1Hz sync tally doesn't stall on screen-off idle.
     private var wakeLock: PowerManager.WakeLock? = null
+    // Flushes the cloud queue as soon as connectivity returns (§7).
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     // Tallies
     private var syncedSecondsThisMinute = 0
     private var isConnectedThisMinute = false
     private var bpmReadings = mutableListOf<Int>()
     private var spo2Readings = mutableListOf<Int>()
+    private var tempReadings = mutableListOf<Double>()
     // Consecutive fully-disconnected minutes; first couple still get reported so the
     // backend sees the device went offline instead of the stream just stopping.
     private var consecutiveDisconnectedMinutes = 0
@@ -112,6 +118,7 @@ class BleForegroundService : Service() {
         // Start periodic pet care checker
         startPetCareTimer()
         startSyncStateTimer()
+        registerNetworkCallback()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -186,9 +193,43 @@ class BleForegroundService : Service() {
         petCareRunnable = null
         syncStateRunnable?.let { handler.removeCallbacks(it) }
         syncStateRunnable = null
+        unregisterNetworkCallback()
         disconnectGatt()
         try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (e: Exception) {}
         super.onDestroy()
+    }
+
+    // ============ CONNECTIVITY CALLBACK (§7) ============
+
+    /** Registers a default-network callback so a queued telemetry backlog flushes the
+     * moment connectivity returns, instead of waiting for the next scheduled flush. */
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return // already registered, avoid double-register
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    try {
+                        cloudManager.flushQueue()
+                    } catch (e: Exception) {
+                        Log.w("BleForegroundService", "flushQueue on network available failed: $e")
+                    }
+                }
+            }
+            cm.registerDefaultNetworkCallback(callback)
+            connectivityManager = cm
+            networkCallback = callback
+        } catch (e: Exception) {
+            Log.w("BleForegroundService", "registerNetworkCallback failed: $e")
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        try {
+            networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
+        } catch (e: Exception) {}
+        networkCallback = null
+        connectivityManager = null
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -262,16 +303,26 @@ class BleForegroundService : Service() {
         syncStateRunnable?.let { handler.removeCallbacks(it) }
         syncStateRunnable = object : Runnable {
             private var secondsTick = 0
+            // Real wall-clock time the current minute window opened (§1); captured on the
+            // window's first tick and held unchanged across retries, per telemetry contract.
+            private var windowStartMs = 0L
             override fun run() {
                 try {
+                    if (secondsTick == 0) windowStartMs = System.currentTimeMillis()
                     val connected = gatt != null && prefs?.getBoolean(PREF_CONNECTED, false) == true
                     if (connected) {
                         isConnectedThisMinute = true
                         evaluateActivePresenceGrace()
-                        if (presenceDetected()) {
+                        // Clinical (no-grace) presence drives the synced tally that feeds the
+                        // backend usage rule; grace-smoothed presence below still gates vitals
+                        // collection, matching prior UI/telemetry-averaging behavior (ADR: clinical != visual).
+                        if (instantaneousPresenceDetected()) {
                             syncedSecondsThisMinute++
+                        }
+                        if (presenceDetected()) {
                             if (bioProcessor.lastValidBpm > 0) bpmReadings.add(bioProcessor.lastValidBpm)
                             if (bioProcessor.lastValidSpO2 > 0) spo2Readings.add(bioProcessor.lastValidSpO2)
+                            if (tempProcessor.lastValidTemp > 0) tempReadings.add(tempProcessor.lastValidTemp)
                         }
                     }
                     secondsTick++
@@ -284,14 +335,15 @@ class BleForegroundService : Service() {
 
                             val avgBpm = if (bpmReadings.isNotEmpty()) bpmReadings.average().toInt() else null
                             val avgSpo2 = if (spo2Readings.isNotEmpty()) spo2Readings.average().toInt() else null
-                            cloudManager.logSyncStatus(synced, avgBpm, avgSpo2, null)
+                            val avgTemp = if (tempReadings.isNotEmpty()) tempReadings.average() else null
+                            cloudManager.logSyncStatus(synced, avgBpm, avgSpo2, avgTemp, windowStartMs)
                         } else {
                             val enableOfflineLogs = prefs?.getBoolean("enable_disconnected_cloud_logs", false) == true
                             // Always report the first couple of disconnected minutes so the backend sees
                             // an explicit "went offline" edge instead of the stream silently stopping;
                             // suppress after that to avoid a device sitting on a shelf spamming all day.
                             if (enableOfflineLogs || consecutiveDisconnectedMinutes < OFFLINE_PING_LIMIT) {
-                                cloudManager.logSyncStatus(false, null, null, null)
+                                cloudManager.logSyncStatus(false, null, null, null, windowStartMs)
                             }
                             consecutiveDisconnectedMinutes++
                         }
@@ -303,6 +355,7 @@ class BleForegroundService : Service() {
                         syncedSecondsThisMinute = 0
                         bpmReadings.clear()
                         spo2Readings.clear()
+                        tempReadings.clear()
                     }
                 } catch (e: Exception) {
                     Log.w("BleForegroundService", "syncStateTimer error: $e")
@@ -316,6 +369,13 @@ class BleForegroundService : Service() {
     /** Human presence from whichever processor owns the sticky active sensor type. */
     private fun presenceDetected(): Boolean =
         if (activeSensorBytes == 14) tempProcessor.humanDetected else bioProcessor.humanDetected
+
+    /** Clinical presence (no 15s grace window) — feeds ONLY the syncedSecondsThisMinute
+     * tally that the backend usage rule reads. Deliberately distinct from presenceDetected()'s
+     * grace-smoothed reading used by UI/pet-care/mission-visual consumers: clinical presence
+     * != visual presence, per telemetry ADR. */
+    private fun instantaneousPresenceDetected(): Boolean =
+        if (activeSensorBytes == 14) tempProcessor.instantaneousDetected else bioProcessor.instantaneousDetected
 
     /** Run the grace-window evaluation on the active sensor's processor. */
     private fun evaluateActivePresenceGrace() {
@@ -780,6 +840,10 @@ class BioSignalProcessor(private val context: Context) {
     var lastValidBpm = 0
     var lastValidSpO2 = 0
     var humanDetected = false
+    // No-grace presence for the clinical sync tally (§5); humanDetected above stays
+    // grace-smoothed for UI/pet-care/mission-visual consumers.
+    var instantaneousDetected = false
+        private set
     private var lastHumanDetectedTimeMs = 0L
 
 
@@ -846,7 +910,8 @@ class BioSignalProcessor(private val context: Context) {
         val isBpmStable = bpmHistory.size < 3 || bpmStdDev < 40.0
         
         val newHumanDetected = fingerDetectedState && hasValidVitals && fingerSustained && isBpmStable
-        
+        instantaneousDetected = newHumanDetected
+
         if (newHumanDetected) {
             lastHumanDetectedTimeMs = System.currentTimeMillis()
         }
@@ -986,6 +1051,7 @@ class BioSignalProcessor(private val context: Context) {
         amplitudeSampleCount = 0
         initialized = false
         fingerDetectedState = false
+        instantaneousDetected = false
         val effectivelyDetected = (System.currentTimeMillis() - lastHumanDetectedTimeMs < 15000L)
         if (effectivelyDetected != humanDetected) {
             humanDetected = effectivelyDetected
@@ -1050,6 +1116,15 @@ class TemperatureSignalProcessor(private val context: Context) {
     @Volatile var humanDetected = false
         private set
 
+    // Last physiologically-plausible skin temp (Celsius), for avgTemp telemetry (§4).
+    @Volatile var lastValidTemp: Double = 0.0
+        private set
+
+    // Clinical (no-grace) presence for the sync tally (§5): a sustained in-range streak,
+    // independent of the 15s grace hold that humanDetected above applies for UI/pet-care.
+    val instantaneousDetected: Boolean
+        get() = consecutiveValidSamples >= sustainedThreshold
+
     private fun rawToCelsius(raw: Int): Double = raw * 0.02 - 273.15
 
     fun process(rawTemp: Int) {
@@ -1057,12 +1132,17 @@ class TemperatureSignalProcessor(private val context: Context) {
         // sensor disconnected or malfunctioning. Strict mode treats it as absent.
         if (rawTemp == 0) {
             consecutiveValidSamples = 0
+            // Clear last-valid temp so the avgTemp accumulation gate (>0) excludes
+            // stale readings while the 15s grace window still holds humanDetected true
+            // - mirrors BioSignalProcessor zeroing lastValidBpm/lastValidSpO2 on signal loss.
+            lastValidTemp = 0.0
             updateDetected(false)
             return
         }
 
         val tempCelsius = rawToCelsius(rawTemp)
         val inHumanRange = tempCelsius in minHumanTemp..maxHumanTemp
+        if (inHumanRange) lastValidTemp = tempCelsius
 
         if (inHumanRange) consecutiveValidSamples++ else consecutiveValidSamples = 0
 
@@ -1082,6 +1162,7 @@ class TemperatureSignalProcessor(private val context: Context) {
     fun reset() {
         consecutiveValidSamples = 0
         lastHumanDetectedTimeMs = 0L
+        lastValidTemp = 0.0
         updateDetected(false)
     }
 

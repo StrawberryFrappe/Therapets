@@ -45,6 +45,16 @@ Adopt a **Unified Sync State** model that separates *display smoothing* from
   context.
 - **Show raw state with no smoothing** — rejected: unusable UX given PoC sensors.
 
+## Addendum (2026-07-13) — enforced in the native sync tally
+
+The native per-minute sync tally previously incremented on the **grace-smoothed**
+presence (`humanDetected`, 15 s hold), which let visual smoothing leak into the
+recorded record — a violation of this ADR. The tally now increments on a **no-grace
+clinical presence** (`instantaneousDetected`), while the grace-smoothed value stays
+for UI / pet-care / mission-visual only. See `docs/capa_nativa.md` "Presencia clínica
+vs. visual". Net effect: recorded synced minutes may read slightly lower than before,
+but are honest.
+
 ## References
 
 - `AGENTS.md` — Unified Sync State Vision

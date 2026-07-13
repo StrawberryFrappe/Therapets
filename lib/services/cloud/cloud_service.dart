@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'cloud_event.dart';
@@ -15,13 +16,21 @@ class CloudService {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
 
+  // Native (Kotlin) cloud queue bridge — the native side is the sole
+  // publisher of telemetry now; this channel just lets the UI inspect it.
+  static const MethodChannel _nativeChannel = MethodChannel('sync_companion/bluetooth');
+
   // Configurable cloud settings (can be changed in Advanced Settings)
   String _baseUrl = 'http://200.13.5.20:8080';
   String _deviceToken = '';
-  
+
   // Preference keys
   static const String _prefKeyBaseUrl = 'cloud_base_url';
   static const String _prefKeyDeviceToken = 'cloud_device_token';
+
+  // Hosts allowed to use plain http. Any other host must use https.
+  // Single source of truth for the §10 config validation rule.
+  static const Set<String> _allowedHttpHosts = {'200.13.5.20'};
 
   bool _isInitialized = false;
   bool _isFlushing = false;
@@ -66,8 +75,28 @@ class CloudService {
     _deviceToken = prefs.getString(_prefKeyDeviceToken) ?? '';
   }
 
+  /// Validate a candidate base URL against the http allowlist.
+  /// Returns null when valid, otherwise a human-readable error message.
+  static String? validateBaseUrl(String baseUrl) {
+    final uri = Uri.tryParse(baseUrl);
+    if (uri == null || uri.host.isEmpty) {
+      return 'Invalid base URL';
+    }
+    if (uri.scheme == 'http' && !_allowedHttpHosts.contains(uri.host)) {
+      return 'Plain http is only allowed for the default server; use https for other hosts';
+    }
+    return null;
+  }
+
   /// Update cloud configuration
   Future<void> updateConfig({String? baseUrl, String? deviceToken}) async {
+    if (baseUrl != null) {
+      final error = validateBaseUrl(baseUrl);
+      if (error != null) {
+        throw ArgumentError(error);
+      }
+    }
+
     final prefs = await SharedPreferences.getInstance();
     if (baseUrl != null) {
       _baseUrl = baseUrl;
@@ -110,58 +139,6 @@ class CloudService {
     if (hasConnection) {
       flushQueue();
     }
-  }
-
-  /// Report sync status at minute boundary (new telemetry format)
-  /// 
-  /// For MAX30100 devices: provide avgBpm and avgSpo2
-  /// For GY906 devices: provide avgTemp
-  /// Vitals are wrapped in a 'vitals' object for consistent cloud parsing.
-  Future<void> logSyncStatus({
-    required DateTime timestamp,
-    required bool synced,
-    int? avgBpm,
-    int? avgSpo2,
-    double? avgTemp,
-  }) async {
-    // Build vitals object based on which readings are available
-    final Map<String, dynamic> vitals = {};
-    if (avgBpm != null && avgBpm > 0) {
-      vitals['avgBpm'] = avgBpm;
-    }
-    if (avgSpo2 != null && avgSpo2 > 0) {
-      vitals['avgSpo2'] = avgSpo2;
-    }
-    if (avgTemp != null) {
-      vitals['avgTemp'] = (avgTemp * 10).round() / 10;
-    }
-
-    await logEvent('sync_status', {
-      'synced': synced,
-      if (vitals.isNotEmpty) 'vitals': vitals,
-    }, timestamp: timestamp);
-  }
-
-  /// Report mission completion
-  Future<void> logMissionCompleted({
-    required DateTime timestamp,
-    required String missionId,
-  }) async {
-    await logEvent('mission_completed', {
-      'mission_id': missionId,
-    }, timestamp: timestamp);
-  }
-
-  Future<void> logMinigamePlayed({
-    required String gameId,
-    required int score,
-    required Duration playTime,
-  }) async {
-    await logEvent('minigame_played', {
-      'game_id': gameId,
-      'score': score,
-      'play_time_seconds': playTime.inSeconds,
-    });
   }
 
   /// Flush all queued events to the cloud
@@ -207,10 +184,22 @@ class CloudService {
     try {
       final url = Uri.parse('$_baseUrl/api/v1/$_deviceToken/telemetry');
 
+      // eventId is derived from eventType + timestamp, both of which are
+      // persisted on the queued CloudEvent and untouched by retries (only
+      // retryCount is mutated), so it stays stable across retries without
+      // needing a dedicated queue field.
+      final tsMs = event.timestamp.millisecondsSinceEpoch;
+      final eventId = '${event.eventType}-$tsMs';
+
       final body = jsonEncode({
-        'eventType': event.eventType,
-        'timestamp': event.timestamp.millisecondsSinceEpoch,
-        'payload': event.payload,
+        'ts': tsMs,
+        'values': {
+          'payload': {
+            'eventId': eventId,
+            'eventType': event.eventType,
+            ...event.payload,
+          },
+        },
       });
 
       final response = await http
@@ -236,6 +225,49 @@ class CloudService {
 
   /// Get current queue size (for debugging/UI)
   int get pendingEventCount => _queue.count;
+
+  /// Number of events queued in the native (Kotlin) cloud queue.
+  /// Returns 0 if the native service isn't running or the call fails.
+  Future<int> nativeQueueCount() async {
+    try {
+      final count = await _nativeChannel.invokeMethod<int>('getCloudQueueCount');
+      return count ?? 0;
+    } catch (e) {
+      print('CloudService: nativeQueueCount failed: $e');
+      return 0;
+    }
+  }
+
+  /// Epoch ms of the last successful native cloud POST, 0 if none/unavailable.
+  Future<int> lastNativeSync() async {
+    try {
+      final ts = await _nativeChannel.invokeMethod<int>('getLastCloudSync');
+      return ts ?? 0;
+    } catch (e) {
+      print('CloudService: lastNativeSync failed: $e');
+      return 0;
+    }
+  }
+
+  /// Last native cloud sync error text, '' if none/unavailable.
+  Future<String> lastNativeError() async {
+    try {
+      final err = await _nativeChannel.invokeMethod<String>('getLastCloudError');
+      return err ?? '';
+    } catch (e) {
+      print('CloudService: lastNativeError failed: $e');
+      return '';
+    }
+  }
+
+  /// Trigger a flush of the native cloud queue.
+  Future<void> flushNativeQueue() async {
+    try {
+      await _nativeChannel.invokeMethod('flushCloudQueue');
+    } catch (e) {
+      print('CloudService: flushNativeQueue failed: $e');
+    }
+  }
 
   /// Dispose resources
   void dispose() {

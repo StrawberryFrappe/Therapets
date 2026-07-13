@@ -35,6 +35,14 @@ class MainActivity : FlutterActivity() {
 	private var pendingPermResult: MethodChannel.Result? = null
 	private var requestedPerms: Array<String> = arrayOf()
 
+	// Single reusable CloudManager for the cloud-queue channel methods. Constructing
+	// one per call leaks a non-daemon executor thread each time (never shut down), so
+	// polling getCloudQueueCount would accumulate threads without bound.
+	// Its queue is SharedPreferences-backed, so reads reflect the service instance's
+	// writes; a UI-triggered flushQueue() and the service's own flush are made
+	// end-to-end idempotent by the per-event eventId (backend dedups on it).
+	private val cloudManager by lazy { CloudManager(applicationContext) }
+
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
 
@@ -250,6 +258,51 @@ class MainActivity : FlutterActivity() {
 						result.error("battery_opt_failed", e.toString(), null)
 					}
 				}
+				"getCloudQueueCount" -> {
+					if (!isBleServiceRunning()) {
+						result.error("service_not_running", "BleForegroundService is not running", null)
+					} else {
+						try {
+							result.success(cloudManager.getQueueCount())
+						} catch (e: Exception) {
+							result.error("cloud_queue_count_failed", e.toString(), null)
+						}
+					}
+				}
+				"getLastCloudSync" -> {
+					if (!isBleServiceRunning()) {
+						result.error("service_not_running", "BleForegroundService is not running", null)
+					} else {
+						try {
+							result.success(cloudManager.getLastSyncTs())
+						} catch (e: Exception) {
+							result.error("cloud_last_sync_failed", e.toString(), null)
+						}
+					}
+				}
+				"getLastCloudError" -> {
+					if (!isBleServiceRunning()) {
+						result.error("service_not_running", "BleForegroundService is not running", null)
+					} else {
+						try {
+							result.success(cloudManager.getLastError())
+						} catch (e: Exception) {
+							result.error("cloud_last_error_failed", e.toString(), null)
+						}
+					}
+				}
+				"flushCloudQueue" -> {
+					if (!isBleServiceRunning()) {
+						result.error("service_not_running", "BleForegroundService is not running", null)
+					} else {
+						try {
+							cloudManager.flushQueue()
+							result.success(null)
+						} catch (e: Exception) {
+							result.error("flush_cloud_queue_failed", e.toString(), null)
+						}
+					}
+				}
 				else -> result.notImplemented()
 			}
 		}
@@ -337,6 +390,19 @@ class MainActivity : FlutterActivity() {
 				}
 			}
 		})
+	}
+
+	// CloudManager is prefs-backed (queue/state persisted via SharedPreferences,
+	// see CloudManager.kt), so a fresh instance here reads the same state as the
+	// one owned by the running service — no service binding needed.
+	private fun isBleServiceRunning(): Boolean {
+		return try {
+			val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+			val list = am.getRunningServices(Integer.MAX_VALUE)
+			list.any { it.service.className == BleForegroundService::class.java.name }
+		} catch (e: Exception) {
+			false
+		}
 	}
 
 	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
